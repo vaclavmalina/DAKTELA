@@ -9,17 +9,17 @@ from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine
 from streamlit_google_auth import Authenticate
 
-# --- 1. GOOGLE AUTENTIZACE (Trezor: Secrets) ---
-# Do Secrets na Streamlitu musíš přidat: GOOGLE_CLIENT_ID a GOOGLE_CLIENT_SECRET
+# --- 1. GOOGLE AUTENTIZACE ---
 client_id = st.secrets["GOOGLE_CLIENT_ID"]
 client_secret = st.secrets["GOOGLE_CLIENT_SECRET"]
 
+# Upravená inicializace pro vyšší stabilitu
 authenticator = Authenticate(
-    secret_token="nejake_extra_tajne_heslo_123", # Můžeš nechat nebo změnit
-    cookie_name="daktela_harvester_auth",
     client_id=client_id,
     client_secret=client_secret,
-    redirect_uri="https://daktela-tgzlmkd4bsdoxz3cvgm3sc.streamlit.app/", # Zkontroluj, zda sedí s Google Cloudem
+    redirect_uri="https://daktela-tgzlmkd4bsdoxz3cvgm3sc.streamlit.app/",
+    cookie_name="daktela_harvester_auth",
+    cookie_key="nejake_extra_tajne_heslo_123",
 )
 
 # Kontrola přihlášení
@@ -254,4 +254,5 @@ if st.session_state.results_ready:
     if st.button("🔄 Nový export"):
         st.session_state.results_ready = False
         st.rerun()
+
 
