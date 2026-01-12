@@ -19,7 +19,7 @@ authenticator = Authenticate(
     cookie_name="daktela_harvester_auth",
     client_id=client_id,
     client_secret=client_secret,
-    redirect_uri="https://daktela-harvester.streamlit.app", # Zkontroluj, zda sedí s Google Cloudem
+    redirect_uri="https://daktela-tgzlmkd4bsdoxz3cvgm3sc.streamlit.app/", # Zkontroluj, zda sedí s Google Cloudem
 )
 
 # Kontrola přihlášení
@@ -234,9 +234,19 @@ if st.session_state.results_ready:
     st.write("")
     col_dl1, col_dl2 = st.columns(2)
     with col_dl1:
-        st.download_button("💾 STÁHNOUT EXPORT", st.session_text := st.session_state.full_txt, file_name=f"report_{slugify(selected_cat)}.txt", use_container_width=True)
+        st.download_button(
+            label="💾 STÁHNOUT EXPORT", 
+            data=st.session_state.full_txt, 
+            file_name=f"report_{slugify(selected_cat)}.txt", 
+            use_container_width=True
+        )
     with col_dl2:
-        st.download_button("🆔 STÁHNOUT SEZNAM TICKETŮ", st.session_state.id_list_txt, file_name=f"seznam_id_{slugify(selected_cat)}.txt", use_container_width=True)
+        st.download_button(
+            label="🆔 STÁHNOUT SEZNAM TICKETŮ", 
+            data=st.session_state.id_list_txt, 
+            file_name=f"seznam_id_{slugify(selected_cat)}.txt", 
+            use_container_width=True
+        )
 
     st.markdown("**Náhled exportu (posledních 500 řádků):**")
     preview = "\n".join(st.session_state.full_txt.splitlines()[-500:])
@@ -244,3 +254,4 @@ if st.session_state.results_ready:
     if st.button("🔄 Nový export"):
         st.session_state.results_ready = False
         st.rerun()
+
