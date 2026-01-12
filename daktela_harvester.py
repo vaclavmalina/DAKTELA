@@ -8,41 +8,30 @@ from datetime import datetime
 from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine
 
-# --- 1. JEDNODUCHÁ FIREMNÍ AUTENTIZACE ---
-# Místo složité knihovny použijeme přímý vstup, dokud nevyřešíme Google OAuth
+# --- 1. FUNKČNÍ FIREMNÍ AUTENTIZACE ---
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
+    st.set_page_config(page_title="Zabezpečený přístup", page_icon="🔒")
     st.markdown("<h1 style='text-align: center;'>🔒 Firemní přístup</h1>", unsafe_allow_html=True)
-    st.write("Pro přístup k Daktela Harvesteru zadejte firemní přístupové heslo.")
+    st.write("<p style='text-align: center;'>Pro přístup k Daktela Harvesteru zadejte firemní heslo.</p>", unsafe_allow_html=True)
     
-    # Jednoduché heslo pro celou Heureku (ulož si ho do Secrets jako APP_PASSWORD)
-    password_input = st.text_input("Heslo", type="password")
-    if st.button("Přihlásit se"):
-        if password_input == st.secrets["APP_PASSWORD"]:
-            st.session_state.authenticated = True
-            st.rerun()
-        else:
-            st.error("Nesprávné heslo.")
+    # Heslo si nastav v Secrets jako APP_PASSWORD
+    password_input = st.text_input("Heslo", type="password", help="Zadejte heslo pro přístup k aplikaci")
+    
+    col_auth_1, col_auth_2, col_auth_3 = st.columns([1,2,1])
+    with col_auth_2:
+        if st.button("Přihlásit se", use_container_width=True):
+            if password_input == st.secrets["APP_PASSWORD"]:
+                st.session_state.authenticated = True
+                st.rerun()
+            else:
+                st.error("Nesprávné heslo.")
     st.stop()
 
-# Uživatel pro logy (v této verzi statický nebo z inputu)
+# Definice uživatele pro sidebar (po úspěšném přihlášení)
 user_email = "firemni-uzivatel@heureka.group"
-
-if not st.session_state.get('connected'):
-    st.markdown("<h1 style='text-align: center;'>🗃️ Daktela Harvester</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center;'>Pro přístup k aplikaci se prosím přihlaste firemním účtem Heureka.</p>", unsafe_allow_html=True)
-    authenticator.login()
-    st.stop()
-
-# Kontrola domény
-user_email = st.session_state.get('user_info', {}).get('email', '')
-if not user_email.endswith("@heureka.group") and not user_email.endswith("@heureka.cz"):
-    st.error(f"Přístup odepřen. Účet {user_email} není v doméně @heureka.group.")
-    if st.button("Odhlásit se"):
-        authenticator.logout()
-    st.stop()
 
 # --- 2. KONFIGURACE DAKTELA (Trezor: Secrets) ---
 INSTANCE_URL = st.secrets["DAKTELA_URL"]
@@ -93,7 +82,8 @@ st.set_page_config(page_title="Daktela Harvester", layout="centered", page_icon=
 st.markdown("<h1 style='text-align: center;'>🗃️ Daktela Harvester</h1>", unsafe_allow_html=True)
 st.sidebar.write(f"👤 Uživatel: {user_email}")
 if st.sidebar.button("Odhlásit se"):
-    authenticator.logout()
+    st.session_state.authenticated = False
+    st.rerun()
 
 # Inicializace Session State
 if 'process_running' not in st.session_state: st.session_state.process_running = False
@@ -259,8 +249,3 @@ if st.session_state.results_ready:
     if st.button("🔄 Nový export"):
         st.session_state.results_ready = False
         st.rerun()
-
-
-
-
-
