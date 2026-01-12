@@ -7,23 +7,28 @@ import unicodedata
 from datetime import datetime
 from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine
-from streamlit_google_auth import Authenticate
 
-# --- 1. GOOGLE AUTENTIZACE ---
-google_id = st.secrets["GOOGLE_CLIENT_ID"]
-google_secret = st.secrets["GOOGLE_CLIENT_SECRET"]
+# --- 1. JEDNODUCHÁ FIREMNÍ AUTENTIZACE ---
+# Místo složité knihovny použijeme přímý vstup, dokud nevyřešíme Google OAuth
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
 
-# Minimalistická inicializace - zkusíme jen to nejnutnější
-authenticator = Authenticate(
-    client_id=google_id,
-    client_secret=google_secret,
-    redirect_uri="https://daktela-tgzlmkd4bsdoxz3cvgm3sc.streamlit.app/",
-    cookie_name="daktela_harvester_auth",
-    cookie_key="nejake_extra_tajne_heslo_123",
-)
+if not st.session_state.authenticated:
+    st.markdown("<h1 style='text-align: center;'>🔒 Firemní přístup</h1>", unsafe_allow_html=True)
+    st.write("Pro přístup k Daktela Harvesteru zadejte firemní přístupové heslo.")
+    
+    # Jednoduché heslo pro celou Heureku (ulož si ho do Secrets jako APP_PASSWORD)
+    password_input = st.text_input("Heslo", type="password")
+    if st.button("Přihlásit se"):
+        if password_input == st.secrets["APP_PASSWORD"]:
+            st.session_state.authenticated = True
+            st.rerun()
+        else:
+            st.error("Nesprávné heslo.")
+    st.stop()
 
-# Kontrola přihlášení
-authenticator.check_authenticity()
+# Uživatel pro logy (v této verzi statický nebo z inputu)
+user_email = "firemni-uzivatel@heureka.group"
 
 if not st.session_state.get('connected'):
     st.markdown("<h1 style='text-align: center;'>🗃️ Daktela Harvester</h1>", unsafe_allow_html=True)
@@ -254,6 +259,7 @@ if st.session_state.results_ready:
     if st.button("🔄 Nový export"):
         st.session_state.results_ready = False
         st.rerun()
+
 
 
 
