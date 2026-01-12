@@ -7,8 +7,39 @@ import unicodedata
 from datetime import datetime
 from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine
+from streamlit_google_auth import Authenticate
 
-# --- KONFIGURACE ---
+# --- 1. GOOGLE AUTENTIZACE (Trezor: Secrets) ---
+# Do Secrets na Streamlitu musíš přidat: GOOGLE_CLIENT_ID a GOOGLE_CLIENT_SECRET
+client_id = st.secrets["GOOGLE_CLIENT_ID"]
+client_secret = st.secrets["GOOGLE_CLIENT_SECRET"]
+
+authenticator = Authenticate(
+    secret_token="nejake_extra_tajne_heslo_123", # Můžeš nechat nebo změnit
+    cookie_name="daktela_harvester_auth",
+    client_id=client_id,
+    client_secret=client_secret,
+    redirect_uri="https://daktela-harvester.streamlit.app", # Zkontroluj, zda sedí s Google Cloudem
+)
+
+# Kontrola přihlášení
+authenticator.check_authenticity()
+
+if not st.session_state.get('connected'):
+    st.markdown("<h1 style='text-align: center;'>🗃️ Daktela Harvester</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center;'>Pro přístup k aplikaci se prosím přihlaste firemním účtem Heureka.</p>", unsafe_allow_html=True)
+    authenticator.login()
+    st.stop()
+
+# Kontrola domény
+user_email = st.session_state.get('user_info', {}).get('email', '')
+if not user_email.endswith("@heureka.group") and not user_email.endswith("@heureka.cz"):
+    st.error(f"Přístup odepřen. Účet {user_email} není v doméně @heureka.group.")
+    if st.button("Odhlásit se"):
+        authenticator.logout()
+    st.stop()
+
+# --- 2. KONFIGURACE DAKTELA (Trezor: Secrets) ---
 INSTANCE_URL = st.secrets["DAKTELA_URL"]
 ACCESS_TOKEN = st.secrets["DAKTELA_TOKEN"]
 
@@ -19,7 +50,7 @@ def load_anonymizer():
 
 analyzer, anonymizer = load_anonymizer()
 
-# --- POMOCNÉ FUNKCE ---
+# --- 3. POMOCNÉ FUNKCE ---
 
 def slugify(text):
     if not text: return "export"
@@ -50,11 +81,14 @@ def format_date_cz(date_str):
         return dt.strftime('%d.%m.%Y %H:%M:%S')
     except: return date_str
 
-# --- STREAMLIT UI ---
+# --- 4. STREAMLIT UI (Samotná aplikace) ---
 st.set_page_config(page_title="Daktela Harvester", layout="centered", page_icon="🗃️")
 
-# 1. Vycentrovaný název
+# Vycentrovaný název a info o uživateli
 st.markdown("<h1 style='text-align: center;'>🗃️ Daktela Harvester</h1>", unsafe_allow_html=True)
+st.sidebar.write(f"👤 Uživatel: {user_email}")
+if st.sidebar.button("Odhlásit se"):
+    authenticator.logout()
 
 # Inicializace Session State
 if 'process_running' not in st.session_state: st.session_state.process_running = False
@@ -64,16 +98,14 @@ if 'full_txt' not in st.session_state: st.session_state.full_txt = ""
 if 'id_list_txt' not in st.session_state: st.session_state.id_list_txt = ""
 if 'stats' not in st.session_state: st.session_state.stats = {}
 
-# 2. Úvodní text
 st.write("Aplikace slouží pro vyexportování dat z Daktely.")
 st.write("") 
 st.markdown("**Postupuj prosím podle kroků níže:**")
 
-# 3. NASTAVENÍ ČASOVÉHO OBDOBÍ
+# KROK 1
 with st.expander("📅 1. KROK: Nastavení časového období a limitů", expanded=not st.session_state.results_ready):
     col1, col2 = st.columns(2)
     with col1:
-        # Vynucení formátu DD.MM.YYYY
         date_from = st.date_input("Datum od", datetime.now().replace(day=1), format="DD.MM.YYYY")
     with col2:
         date_to = st.date_input("Datum do", datetime.now(), format="DD.MM.YYYY")
@@ -88,7 +120,7 @@ with st.expander("📅 1. KROK: Nastavení časového období a limitů", expand
             st.session_state['statuses'] = res_stat.json().get('result', {}).get('data', [])
         st.success("Seznamy načteny.")
 
-# 4. VÝBĚR DAT
+# KROK 2
 if 'categories' in st.session_state:
     with st.expander("📁 2 KROK: výběr kategorie a statusu", expanded=not st.session_state.results_ready):
         cat_options = {c['title']: c['name'] for c in st.session_state['categories']}
@@ -104,7 +136,7 @@ if 'categories' in st.session_state:
                 st.session_state.stop_requested = False
                 st.rerun()
 
-# 5. LOADING A PROCES
+# LOADING A PROCES
 if st.session_state.process_running:
     st.divider()
     if st.button("🛑 ZASTAVIT SBĚR"):
@@ -150,25 +182,21 @@ if st.session_state.process_running:
                 if acts:
                     t_title = acts[0].get('ticket', {}).get('title', 'Bez předmětu')
                     full_txt += f"\n\n{'#'*80}\n### TICKET č. {t_num} | {t_title}\n{'#'*80}\n\n"
-                    
                     for act in sorted(acts, key=lambda x: x.get('time', '')):
                         raw_text = (act.get('item') or {}).get('text') or act.get('description')
                         cleaned = clean_html(raw_text)
                         if not cleaned: continue
-                        
                         total_acts_found += 1
                         raw_type = str(act.get('type', '')).upper()
                         is_comment = "COMMNET" in raw_type or (not act.get('type') and act.get('description'))
                         user_title = (act.get('user') or {}).get('title', 'Podpora')
                         contact_title = (act.get('contact') or {}).get('title', 'Klient')
-
                         if is_comment:
-                            act_label = f"AKTIVITA (komentář)"
+                            act_label = "AKTIVITA (komentář)"
                             direction_text = f"INTERNÍ POZNÁMKA ({user_title})"
                         else:
-                            act_label = f"AKTIVITA (e-mail)"
+                            act_label = "AKTIVITA (e-mail)"
                             direction_text = f"Klient ({contact_title}) >>>> Balíkobot" if (act.get('item') or {}).get('direction') == "in" else f"Balíkobot ({user_title}) >>>> Klient"
-                        
                         full_txt += f"  --- {act_label} | {format_date_cz(act.get('time'))} ---\n"
                         full_txt += f"  SMĚR: {direction_text}\n  {'-'*40}\n"
                         indented = "\n".join("    " + line for line in cleaned.splitlines())
@@ -180,7 +208,6 @@ if st.session_state.process_running:
             remaining = (len(tickets) - (idx + 1)) * avg_time
             eta_placeholder.markdown(f"⏱️ **ETA:** cca {int(remaining)}s | **Hotovo:** {idx+1}/{len(tickets)}")
 
-        # Uložení statistik
         st.session_state.stats = {
             "tickets": len(tickets),
             "activities": total_acts_found,
@@ -193,12 +220,10 @@ if st.session_state.process_running:
         st.session_state.process_running = False
         st.rerun()
 
-# 6. VÝSLEDKY A STATISTIKY
+# VÝSLEDKY
 if st.session_state.results_ready:
     st.divider()
     st.success("🎉 Export dokončen!")
-    
-    # Statistiky v aplikaci
     s = st.session_state.stats
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Ticketů", s["tickets"])
@@ -209,16 +234,13 @@ if st.session_state.results_ready:
     st.write("")
     col_dl1, col_dl2 = st.columns(2)
     with col_dl1:
-        st.download_button("💾 STÁHNOUT EXPORT", st.session_state.full_txt, file_name=f"report_{slugify(selected_cat)}.txt", use_container_width=True)
+        st.download_button("💾 STÁHNOUT EXPORT", st.session_text := st.session_state.full_txt, file_name=f"report_{slugify(selected_cat)}.txt", use_container_width=True)
     with col_dl2:
         st.download_button("🆔 STÁHNOUT SEZNAM TICKETŮ", st.session_state.id_list_txt, file_name=f"seznam_id_{slugify(selected_cat)}.txt", use_container_width=True)
 
     st.markdown("**Náhled exportu (posledních 500 řádků):**")
-    # Scrollovací okno díky pevném výšce v st.code (v nových verzích Streamlitu automatické)
     preview = "\n".join(st.session_state.full_txt.splitlines()[-500:])
     st.code(preview, language="text")
-    
     if st.button("🔄 Nový export"):
         st.session_state.results_ready = False
-
         st.rerun()
