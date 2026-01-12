@@ -9,8 +9,8 @@ from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine
 
 # --- KONFIGURACE ---
-INSTANCE_URL = st.secrets["DAKTELA_TOKEN"]
-ACCESS_TOKEN = st.secrets["DAKTELA_URL"]
+INSTANCE_URL = st.secrets["DAKTELA_URL"]
+ACCESS_TOKEN = st.secrets["DAKTELA_TOKEN"]
 
 # Inicializace anonymizátoru
 @st.cache_resource
@@ -220,4 +220,5 @@ if st.session_state.results_ready:
     
     if st.button("🔄 Nový export"):
         st.session_state.results_ready = False
+
         st.rerun()
