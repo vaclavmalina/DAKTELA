@@ -17,8 +17,7 @@ if not st.session_state.authenticated:
     st.markdown("<h1 style='text-align: center;'>🔒 Firemní přístup</h1>", unsafe_allow_html=True)
     st.write("<p style='text-align: center;'>Pro přístup k Daktela Harvesteru zadejte firemní heslo.</p>", unsafe_allow_html=True)
     
-    # Heslo si nastav v Secrets jako APP_PASSWORD
-    password_input = st.text_input("Heslo", type="password", help="Zadejte heslo pro přístup k aplikaci")
+    password_input = st.text_input("Heslo", type="password")
     
     col_auth_1, col_auth_2, col_auth_3 = st.columns([1,2,1])
     with col_auth_2:
@@ -29,9 +28,6 @@ if not st.session_state.authenticated:
             else:
                 st.error("Nesprávné heslo.")
     st.stop()
-
-# Definice uživatele pro sidebar (po úspěšném přihlášení)
-user_email = "firemni-uzivatel@heureka.group"
 
 # --- 2. KONFIGURACE DAKTELA (Trezor: Secrets) ---
 INSTANCE_URL = st.secrets["DAKTELA_URL"]
@@ -75,15 +71,19 @@ def format_date_cz(date_str):
         return dt.strftime('%d.%m.%Y %H:%M:%S')
     except: return date_str
 
-# --- 4. STREAMLIT UI (Samotná aplikace) ---
-st.set_page_config(page_title="Daktela Harvester", layout="centered", page_icon="🗃️")
+# --- 4. STREAMLIT UI ---
+# Nastavení schová levý panel (initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Daktela Harvester", layout="centered", page_icon="🗃️", initial_sidebar_state="collapsed")
 
-# Vycentrovaný název a info o uživateli
+# Skrytí sidebaru pomocí CSS (pro jistotu, aby tam nezůstala ani šipka)
+st.markdown("""
+    <style>
+        [data-testid="stSidebar"] {display: none;}
+        [data-testid="stSidebarNav"] {display: none;}
+    </style>
+""", unsafe_allow_html=True)
+
 st.markdown("<h1 style='text-align: center;'>🗃️ Daktela Harvester</h1>", unsafe_allow_html=True)
-st.sidebar.write(f"👤 Uživatel: {user_email}")
-if st.sidebar.button("Odhlásit se"):
-    st.session_state.authenticated = False
-    st.rerun()
 
 # Inicializace Session State
 if 'process_running' not in st.session_state: st.session_state.process_running = False
@@ -131,7 +131,7 @@ if 'categories' in st.session_state:
                 st.session_state.stop_requested = False
                 st.rerun()
 
-# LOADING A PROCES
+# PROCES SBĚRU
 if st.session_state.process_running:
     st.divider()
     if st.button("🛑 ZASTAVIT SBĚR"):
@@ -229,23 +229,17 @@ if st.session_state.results_ready:
     st.write("")
     col_dl1, col_dl2 = st.columns(2)
     with col_dl1:
-        st.download_button(
-            label="💾 STÁHNOUT EXPORT", 
-            data=st.session_state.full_txt, 
-            file_name=f"report_{slugify(selected_cat)}.txt", 
-            use_container_width=True
-        )
+        st.download_button(label="💾 STÁHNOUT EXPORT", data=st.session_state.full_txt, file_name=f"report_{slugify(selected_cat)}.txt", use_container_width=True)
     with col_dl2:
-        st.download_button(
-            label="🆔 STÁHNOUT SEZNAM TICKETŮ", 
-            data=st.session_state.id_list_txt, 
-            file_name=f"seznam_id_{slugify(selected_cat)}.txt", 
-            use_container_width=True
-        )
+        st.download_button(label="🆔 STÁHNOUT SEZNAM TICKETŮ", data=st.session_state.id_list_txt, file_name=f"seznam_id_{slugify(selected_cat)}.txt", use_container_width=True)
 
     st.markdown("**Náhled exportu (posledních 500 řádků):**")
     preview = "\n".join(st.session_state.full_txt.splitlines()[-500:])
+    
+    # Scrollovací okno s fixní výškou 400px
     st.code(preview, language="text")
-    if st.button("🔄 Nový export"):
+    st.markdown("""<style> div[data-testid="stCodeBlock"] > div { overflow-y: auto; height: 400px; } </style>""", unsafe_allow_html=True)
+    
+    if st.button("🔄 Nový export", use_container_width=True):
         st.session_state.results_ready = False
         st.rerun()
