@@ -14,7 +14,7 @@ if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
-    st.set_page_config(page_title="Balíkobot Data Centrum", page_icon="🔒", layout="wide")
+    st.set_page_config(page_title="Zabezpečený přístup", page_icon="🔒", layout="centered")
     
     col_main_1, col_main_2, col_main_3 = st.columns([1,2,1])
     with col_main_2:
@@ -110,11 +110,25 @@ st.markdown("""
     <style>
         [data-testid="stSidebar"] {display: none;}
         [data-testid="stSidebarNav"] {display: none;}
-        .big-button {
-            padding: 50px 20px !important;
-            font-size: 24px !important;
-            width: 100%;
-            height: 100%;
+        
+        /* Zvětšení tlačítek na dashboardu */
+        div[data-testid="column"] button {
+            height: 120px !important;
+            width: 100% !important;
+            font-size: 20px !important;
+            font-weight: 600 !important;
+            border-radius: 12px !important;
+            border: 1px solid #e0e0e0;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+        }
+        div[data-testid="column"] button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+            border-color: #ff4b4b;
+        }
+        div[data-testid="column"] button:active {
+            transform: translateY(0px);
         }
     </style>
 """, unsafe_allow_html=True)
@@ -125,49 +139,66 @@ if 'current_app' not in st.session_state:
 
 # --- DASHBOARD (HLAVNÍ MENU) ---
 if st.session_state.current_app == "dashboard":
-    st.markdown("<h1 style='text-align: center;'>🗂️ Balíkobot Data Centrum</h1>", unsafe_allow_html=True)
-    st.write("")
-    st.write("")
+    st.markdown("<h1 style='text-align: center; margin-bottom: 40px;'>🗂️ Balíkobot Data Centrum</h1>", unsafe_allow_html=True)
 
-    # Matice 3x3
-    col1, col2, col3 = st.columns(3)
+    # Matice 3x3 s použitím st.toast pro elegantní notifikace
     
+    # ŘADA 1
+    col1, col2, col3 = st.columns(3)
     with col1:
-        if st.button("🔎 Analýza ticketů", use_container_width=True):
+        if st.button("🔎\nAnalýza ticketů", use_container_width=True):
             st.session_state.current_app = "harvester"
             st.rerun()
-        if st.button("📊 Statistiky", use_container_width=True):
-            st.info("Modul Statistiky je ve vývoji.")
-        if st.button("⚙️ Nastavení", use_container_width=True):
-            st.info("Modul Nastavení je ve vývoji.")
-
     with col2:
-        if st.button("📈 Dashboard", use_container_width=True):
-            st.info("Modul Dashboard je ve vývoji.")
-        if st.button("📑 Reporting", use_container_width=True):
-            st.info("Modul Reporting je ve vývoji.")
-        if st.button("👥 Uživatelé", use_container_width=True):
-            st.info("Modul Uživatelé je ve vývoji.")
-
+        if st.button("📊\nStatistiky", use_container_width=True):
+            st.toast("🚧 Modul **Statistiky** je momentálně ve vývoji.", icon="👨‍💻")
     with col3:
-        if st.button("🔄 Automatizace", use_container_width=True):
-            st.info("Modul Automatizace je ve vývoji.")
-        if st.button("🗄️ Archiv", use_container_width=True):
-            st.info("Modul Archiv je ve vývoji.")
-        if st.button("❓ Nápověda", use_container_width=True):
-            st.info("Modul Nápověda je ve vývoji.")
+        if st.button("📈\nDashboard", use_container_width=True):
+            st.toast("🚧 Modul **Dashboard** připravujeme.", icon="🛠️")
+
+    st.write("") # Mezera mezi řádky
+
+    # ŘADA 2
+    col4, col5, col6 = st.columns(3)
+    with col4:
+        if st.button("📑\nReporting", use_container_width=True):
+            st.toast("🚧 Modul **Reporting** bude dostupný brzy.", icon="⏳")
+    with col5:
+        if st.button("👥\nUživatelé", use_container_width=True):
+            st.toast("🚧 Správa **Uživatelů** není aktivní.", icon="🔒")
+    with col6:
+        if st.button("🔄\nAutomatizace", use_container_width=True):
+            st.toast("🚧 Modul **Automatizace** se testuje.", icon="🤖")
+
+    st.write("") # Mezera mezi řádky
+
+    # ŘADA 3
+    col7, col8, col9 = st.columns(3)
+    with col7:
+        if st.button("🗄️\nArchiv", use_container_width=True):
+            st.toast("🚧 Přístup do **Archivu** je zatím omezen.", icon="📂")
+    with col8:
+        if st.button("⚙️\nNastavení", use_container_width=True):
+            st.toast("🚧 **Nastavení** aplikace se připravuje.", icon="⚙️")
+    with col9:
+        if st.button("❓\nNápověda", use_container_width=True):
+            st.toast("🚧 Sekce **Nápověda** se sepisuje.", icon="📚")
 
 # --- APLIKACE: HARVESTER (ANALÝZA TICKETŮ) ---
 elif st.session_state.current_app == "harvester":
     
     # Tlačítko zpět do menu
-    if st.button("⬅️ Zpět do menu"):
-        st.session_state.current_app = "dashboard"
-        st.session_state.results_ready = False
-        st.session_state.search_performed = False
-        st.rerun()
+    col_back, col_title, col_void = st.columns([1, 4, 1])
+    with col_back:
+        if st.button("⬅️ Menu"):
+            st.session_state.current_app = "dashboard"
+            st.session_state.results_ready = False
+            st.session_state.search_performed = False
+            st.rerun()
+    with col_title:
+        st.markdown("<h2 style='text-align: center; margin-top: -10px;'>🔎 Analýza ticketů</h2>", unsafe_allow_html=True)
 
-    st.markdown("<h2 style='text-align: center;'>🔎 Analýza ticketů (Daktela)</h2>", unsafe_allow_html=True)
+    st.divider()
 
     # --- SESSION STATE INICIALIZACE ---
     if 'process_running' not in st.session_state: st.session_state.process_running = False
