@@ -106,6 +106,7 @@ def identify_side(title, email, is_user=False):
 # --- HLAVNÍ UI ---
 st.set_page_config(page_title="Balíkobot Data Centrum", layout="centered", initial_sidebar_state="collapsed")
 
+# Profesionální CSS pro Dashboard tlačítka
 st.markdown("""
     <style>
         [data-testid="stSidebar"] {display: none;}
@@ -115,20 +116,30 @@ st.markdown("""
         div[data-testid="column"] button {
             height: 120px !important;
             width: 100% !important;
-            font-size: 20px !important;
+            font-size: 18px !important;
             font-weight: 600 !important;
             border-radius: 12px !important;
             border: 1px solid #e0e0e0;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            transition: all 0.3s ease;
+            background-color: #ffffff;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            transition: all 0.2s ease-in-out;
+            color: #31333F;
         }
         div[data-testid="column"] button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
-            border-color: #ff4b4b;
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            border-color: #FF4B4B;
+            color: #FF4B4B;
+            background-color: #fff5f5;
         }
         div[data-testid="column"] button:active {
-            transform: translateY(0px);
+            transform: translateY(1px);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        
+        /* Zarovnání nadpisu */
+        h1 {
+            margin-bottom: 2rem;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -137,52 +148,42 @@ st.markdown("""
 if 'current_app' not in st.session_state:
     st.session_state.current_app = "dashboard"
 
+# Pomocná funkce pro zobrazení WIP zprávy (Toast - neposouvá layout!)
+def show_wip_msg(module_name):
+    st.toast(f"🚧 Modul **{module_name}** je momentálně ve vývoji.", icon="🛠️")
+
 # --- DASHBOARD (HLAVNÍ MENU) ---
 if st.session_state.current_app == "dashboard":
-    st.markdown("<h1 style='text-align: center; margin-bottom: 40px;'>🗂️ Balíkobot Data Centrum</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center;'>🗂️ Balíkobot Data Centrum</h1>", unsafe_allow_html=True)
 
-    # Matice 3x3 s použitím st.toast pro elegantní notifikace
-    
-    # ŘADA 1
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        if st.button("🔎\nAnalýza ticketů", use_container_width=True):
-            st.session_state.current_app = "harvester"
-            st.rerun()
-    with col2:
-        if st.button("📊\nStatistiky", use_container_width=True):
-            st.toast("🚧 Modul **Statistiky** je momentálně ve vývoji.", icon="👨‍💻")
-    with col3:
-        if st.button("📈\nDashboard", use_container_width=True):
-            st.toast("🚧 Modul **Dashboard** připravujeme.", icon="🛠️")
+    # Definice menu (Grid 3x3)
+    menu_items = [
+        {"label": "🔎\nAnalýza ticketů", "action": "harvester"},
+        {"label": "📊\nStatistiky",      "action": "Statistiky"},
+        {"label": "📈\nDashboard",       "action": "Dashboard"},
+        
+        {"label": "📑\nReporting",       "action": "Reporting"},
+        {"label": "👥\nUživatelé",       "action": "Uživatelé"},
+        {"label": "🔄\nAutomatizace",    "action": "Automatizace"},
+        
+        {"label": "🗄️\nArchiv",          "action": "Archiv"},
+        {"label": "⚙️\nNastavení",       "action": "Nastavení"},
+        {"label": "❓\nNápověda",        "action": "Nápověda"},
+    ]
 
-    st.write("") # Mezera mezi řádky
-
-    # ŘADA 2
-    col4, col5, col6 = st.columns(3)
-    with col4:
-        if st.button("📑\nReporting", use_container_width=True):
-            st.toast("🚧 Modul **Reporting** bude dostupný brzy.", icon="⏳")
-    with col5:
-        if st.button("👥\nUživatelé", use_container_width=True):
-            st.toast("🚧 Správa **Uživatelů** není aktivní.", icon="🔒")
-    with col6:
-        if st.button("🔄\nAutomatizace", use_container_width=True):
-            st.toast("🚧 Modul **Automatizace** se testuje.", icon="🤖")
-
-    st.write("") # Mezera mezi řádky
-
-    # ŘADA 3
-    col7, col8, col9 = st.columns(3)
-    with col7:
-        if st.button("🗄️\nArchiv", use_container_width=True):
-            st.toast("🚧 Přístup do **Archivu** je zatím omezen.", icon="📂")
-    with col8:
-        if st.button("⚙️\nNastavení", use_container_width=True):
-            st.toast("🚧 **Nastavení** aplikace se připravuje.", icon="⚙️")
-    with col9:
-        if st.button("❓\nNápověda", use_container_width=True):
-            st.toast("🚧 Sekce **Nápověda** se sepisuje.", icon="📚")
+    # Vykreslení mřížky
+    rows = [menu_items[i:i+3] for i in range(0, len(menu_items), 3)]
+    for row in rows:
+        cols = st.columns(3)
+        for idx, item in enumerate(row):
+            with cols[idx]:
+                if st.button(item["label"], use_container_width=True):
+                    if item["action"] == "harvester":
+                        st.session_state.current_app = "harvester"
+                        st.rerun()
+                    else:
+                        show_wip_msg(item["action"])
+        st.write("") # Mezera mezi řádky
 
 # --- APLIKACE: HARVESTER (ANALÝZA TICKETŮ) ---
 elif st.session_state.current_app == "harvester":
@@ -226,6 +227,13 @@ elif st.session_state.current_app == "harvester":
         except:
             st.error("Nepodařilo se načíst číselníky.")
             st.stop()
+
+    # --- DEFINICE MAPOVÁNÍ GLOBÁLNĚ PRO TUTO SEKCI ---
+    cat_options_map = {"VŠE (bez filtru)": "ALL"}
+    cat_options_map.update({c['title']: c['name'] for c in st.session_state['categories']})
+    
+    stat_options_map = {"VŠE (bez filtru)": "ALL"}
+    stat_options_map.update({s['title']: s['name'] for s in st.session_state['statuses']})
 
     # --- CALLBACKY ---
     def set_date_range(d_from, d_to):
@@ -277,9 +285,6 @@ elif st.session_state.current_app == "harvester":
             b_r3 = st.columns(3); b_r3[0].button("Minulý týden", use_container_width=True, on_click=cb_last_week); b_r3[1].button("Tento týden", use_container_width=True, on_click=cb_this_week); b_r3[2].button("Včerejšek", use_container_width=True, on_click=cb_yesterday)
 
             st.divider()
-
-            cat_options_map = {"VŠE (bez filtru)": "ALL"}; cat_options_map.update({c['title']: c['name'] for c in st.session_state['categories']})
-            stat_options_map = {"VŠE (bez filtru)": "ALL"}; stat_options_map.update({s['title']: s['name'] for s in st.session_state['statuses']})
 
             c_filt1, c_filt2 = st.columns(2)
             with c_filt1:
