@@ -18,16 +18,18 @@ if not st.session_state.authenticated:
     st.markdown("<h1 style='text-align: center;'>🔒 Firemní přístup</h1>", unsafe_allow_html=True)
     st.write("<p style='text-align: center;'>Pro přístup k Daktela Harvesteru zadejte firemní heslo.</p>", unsafe_allow_html=True)
     
-    password_input = st.text_input("Heslo", type="password")
-    
-    col_auth_1, col_auth_2, col_auth_3 = st.columns([1,2,1])
-    with col_auth_2:
-        if st.button("Přihlásit se", use_container_width=True):
-            if password_input == st.secrets["APP_PASSWORD"]:
-                st.session_state.authenticated = True
-                st.rerun()
-            else:
-                st.error("Nesprávné heslo.")
+    with st.form("login_form"):
+        password_input = st.text_input("Heslo", type="password")
+        col_auth_1, col_auth_2, col_auth_3 = st.columns([1,2,1])
+        with col_auth_2:
+            submitted = st.form_submit_button("Přihlásit se", use_container_width=True)
+
+    if submitted:
+        if password_input == st.secrets["APP_PASSWORD"]:
+            st.session_state.authenticated = True
+            st.rerun()
+        else:
+            st.error("Nesprávné heslo.")
     st.stop()
 
 # --- 2. KONFIGURACE DAKTELA (Trezor: Secrets) ---
@@ -123,14 +125,14 @@ if 'results_ready' not in st.session_state: st.session_state.results_ready = Fal
 if 'export_data' not in st.session_state: st.session_state.export_data = []
 if 'id_list_txt' not in st.session_state: st.session_state.id_list_txt = ""
 if 'stats' not in st.session_state: st.session_state.stats = {}
-if 'found_tickets' not in st.session_state: st.session_state.found_tickets = [] # Seznam nalezených ticketů (fáze 1)
+if 'found_tickets' not in st.session_state: st.session_state.found_tickets = [] 
 if 'search_performed' not in st.session_state: st.session_state.search_performed = False
 
 # Výchozí datumy
 if 'filter_date_from' not in st.session_state: st.session_state.filter_date_from = date.today().replace(day=1)
 if 'filter_date_to' not in st.session_state: st.session_state.filter_date_to = date.today()
 
-# Načtení číselníků při startu
+# Načtení číselníků
 if 'categories' not in st.session_state:
     try:
         res_cat = requests.get(f"{INSTANCE_URL}/api/v6/ticketsCategories.json", headers={'x-auth-token': ACCESS_TOKEN})
@@ -149,30 +151,25 @@ if not st.session_state.process_running and not st.session_state.results_ready:
     with st.container():
         st.subheader("1. Nastavení filtru")
         
-        # A) DATUMY
         c_date1, c_date2 = st.columns(2)
         with c_date1:
             d_from = st.date_input("Datum od", value=st.session_state.filter_date_from, format="DD.MM.YYYY")
         with c_date2:
             d_to = st.date_input("Datum do", value=st.session_state.filter_date_to, format="DD.MM.YYYY")
         
-        # Aktualizace state
         st.session_state.filter_date_from = d_from
         st.session_state.filter_date_to = d_to
 
-        # B) RYCHLÉ VOLBY (3 řady po 3 tlačítkách = 9 tlačítek)
+        # B) RYCHLÉ VOLBY
         st.caption("Rychlý výběr období:")
         
         # --- ŘADA 1 ---
         b_r1 = st.columns(3)
-        
-        # 1. TENTO ROK
         if b_r1[0].button("Tento rok", use_container_width=True):
             st.session_state.filter_date_from = date(date.today().year, 1, 1)
             st.session_state.filter_date_to = date.today()
             st.rerun()
 
-        # 2. MINULÝ ROK (NOVÉ)
         if b_r1[1].button("Minulý rok", use_container_width=True):
             today = date.today()
             last_year = today.year - 1
@@ -180,57 +177,45 @@ if not st.session_state.process_running and not st.session_state.results_ready:
             st.session_state.filter_date_to = date(last_year, 12, 31)
             st.rerun()
 
-        # 3. POSLEDNÍ PŮL ROK (Kalendářně: 6 celých měsíců zpět)
         if b_r1[2].button("Poslední půl rok", use_container_width=True):
             today = date.today()
             first_of_this_month = today.replace(day=1)
             last_of_prev_month = first_of_this_month - timedelta(days=1)
-            
-            # Výpočet startu: -6 měsíců
             start_month = first_of_this_month.month - 6
             start_year = first_of_this_month.year
             if start_month <= 0:
                 start_month += 12
                 start_year -= 1
             start_date = date(start_year, start_month, 1)
-
             st.session_state.filter_date_from = start_date
             st.session_state.filter_date_to = last_of_prev_month
             st.rerun()
 
         # --- ŘADA 2 ---
         b_r2 = st.columns(3)
-
-        # 4. POSLEDNÍ 3 MĚSÍCE (Kalendářně: 3 celé měsíce zpět)
         if b_r2[0].button("Poslední 3 měsíce", use_container_width=True):
             today = date.today()
             first_of_this_month = today.replace(day=1)
             last_of_prev_month = first_of_this_month - timedelta(days=1)
-            
-            # Výpočet startu: -3 měsíce
             start_month = first_of_this_month.month - 3
             start_year = first_of_this_month.year
             if start_month <= 0:
                 start_month += 12
                 start_year -= 1
             start_date = date(start_year, start_month, 1)
-
             st.session_state.filter_date_from = start_date
             st.session_state.filter_date_to = last_of_prev_month
             st.rerun()
 
-        # 5. MINULÝ MĚSÍC (Kalendářní)
         if b_r2[1].button("Minulý měsíc", use_container_width=True):
             today = date.today()
             first_of_this_month = today.replace(day=1)
             last_of_prev_month = first_of_this_month - timedelta(days=1)
             first_of_prev_month = last_of_prev_month.replace(day=1)
-            
             st.session_state.filter_date_from = first_of_prev_month
             st.session_state.filter_date_to = last_of_prev_month
             st.rerun()
 
-        # 6. TENTO MĚSÍC
         if b_r2[2].button("Tento měsíc", use_container_width=True):
             st.session_state.filter_date_from = date.today().replace(day=1)
             st.session_state.filter_date_to = date.today()
@@ -238,19 +223,15 @@ if not st.session_state.process_running and not st.session_state.results_ready:
 
         # --- ŘADA 3 ---
         b_r3 = st.columns(3)
-
-        # 7. MINULÝ TÝDEN (Po-Ne)
         if b_r3[0].button("Minulý týden", use_container_width=True):
             today = date.today()
-            start_of_this_week = today - timedelta(days=today.weekday()) # Po tohoto týdne
-            start_of_last_week = start_of_this_week - timedelta(weeks=1) # Po min. týdne
-            end_of_last_week = start_of_last_week + timedelta(days=6) # Ne min. týdne
-            
+            start_of_this_week = today - timedelta(days=today.weekday())
+            start_of_last_week = start_of_this_week - timedelta(weeks=1)
+            end_of_last_week = start_of_last_week + timedelta(days=6)
             st.session_state.filter_date_from = start_of_last_week
             st.session_state.filter_date_to = end_of_last_week
             st.rerun()
 
-        # 8. TENTO TÝDEN (Po-Dnes)
         if b_r3[1].button("Tento týden", use_container_width=True):
             today = date.today()
             start_of_this_week = today - timedelta(days=today.weekday())
@@ -258,16 +239,15 @@ if not st.session_state.process_running and not st.session_state.results_ready:
             st.session_state.filter_date_to = today
             st.rerun()
 
-        # 9. VČEREJŠEK
         if b_r3[2].button("Včerejšek", use_container_width=True):
             yesterday = date.today() - timedelta(days=1)
             st.session_state.filter_date_from = yesterday
             st.session_state.filter_date_to = yesterday
             st.rerun()
 
-        st.write("") # Mezera
+        st.write("")
 
-        # C) KATEGORIE A STATUS (Vlevo / Vpravo)
+        # C) KATEGORIE A STATUS
         c_filt1, c_filt2 = st.columns(2)
         with c_filt1:
             cat_options = {c['title']: c['name'] for c in st.session_state['categories']}
@@ -277,13 +257,11 @@ if not st.session_state.process_running and not st.session_state.results_ready:
             stat_options = {s['title']: s['name'] for s in st.session_state['statuses']}
             selected_stat = st.selectbox("Status", options=["-- Vyber status --"] + list(stat_options.keys()))
 
-        # Tlačítko pro FÁZI 1 (Hledání)
         st.write("")
         if selected_cat != "-- Vyber kategorii --" and selected_stat != "-- Vyber status --":
             if st.button("🔍 VYHLEDAT TICKETY", type="primary", use_container_width=True):
-                st.session_state.search_performed = False # Reset
+                st.session_state.search_performed = False
                 
-                # Sestavení filtrů
                 params = {
                     "filter[logic]": "and",
                     "filter[filters][0][field]": "created", "filter[filters][0][operator]": "gte", "filter[filters][0][value]": f"{st.session_state.filter_date_from} 00:00:00",
@@ -312,7 +290,6 @@ if not st.session_state.process_running and not st.session_state.results_ready:
 if st.session_state.search_performed and not st.session_state.process_running and not st.session_state.results_ready:
     st.divider()
     
-    # Tlačítko zpět, které resetuje hledání a umožní znovu nastavit filtry
     if st.button("⬅️ Změnit filtr / Hledat znovu"):
         st.session_state.search_performed = False
         st.rerun()
@@ -327,15 +304,21 @@ if st.session_state.search_performed and not st.session_state.process_running an
         if count == 1000:
             st.info("ℹ️ API vrátilo maximální počet 1000 položek. Pokud potřebujete víc, zúžete období.")
 
-        # Tlačítko pro okamžité stažení seznamu ID (OPRAVENO: Převod na string)
+        # Generování názvu souboru ID
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        cat_slug = slugify(selected_cat)
+        stat_slug = slugify(selected_stat)
+        file_name_ids = f"tickets_{cat_slug}_{stat_slug}_{ts}.txt"
+
         found_ids_txt = "\n".join([str(t.get('name', '')) for t in st.session_state.found_tickets])
+        
         st.download_button(
             label="⬇️ Stáhnout nalezená ID (TXT)", 
             data=found_ids_txt, 
-            file_name=f"found_tickets_ids.txt", 
+            file_name=file_name_ids, 
             mime="text/plain"
         )
-        st.write("") # Mezera
+        st.write("")
 
         st.write("Kolik ticketů chcete hloubkově zpracovat (stáhnout aktivity, e-maily)?")
         limit_val = st.number_input("Limit (0 = zpracovat všechny nalezené)", min_value=0, max_value=count, value=min(count, 50))
@@ -357,13 +340,11 @@ if st.session_state.process_running:
         st.session_state.process_running = False
         st.rerun()
 
-    # Příprava regexů
     noise_patterns = [r"Potvrzujeme, že Vaše zpráva byla úspěšně doručena", r"Jelikož Vám chceme poskytnout nejlepší servis", r"dnes ve dnech .* čerpám dovolenou"]
     cut_off_patterns = [r"S pozdravem", r"S pozdravom", r"Kind regards", r"Regards", r"S přáním pěkného dne", r"S přáním hezkého dne", r"Děkuji\n", r"Ďakujem\n", r"Díky\n", r"Tento e-mail nepředstavuje nabídku", r"Pro případ, že tato zpráva obsahuje návrh smlouvy", r"Disclaimer:", r"Confidentiality Notice:", r"Myslete na životní prostředí", r"Please think about the environment"]
     history_patterns = [r"-{5,}", r"_{5,}", r"---------- Odpovězená zpráva ----------", r"Dne .* odesílatel .* napsal\(a\):", r"Od: .* Posláno: .*", r"---------- Původní e-mail ----------"]
     combined_cut_regex = re.compile("|".join(cut_off_patterns + history_patterns), re.IGNORECASE | re.MULTILINE)
 
-    # Aplikace limitu na seznam
     tickets_to_process = st.session_state.found_tickets
     if st.session_state.final_limit > 0:
         tickets_to_process = tickets_to_process[:st.session_state.final_limit]
@@ -373,7 +354,6 @@ if st.session_state.process_running:
     status_placeholder = st.empty()
     
     full_export_data = []
-    id_list_txt = f"SEZNAM ZPRACOVANÝCH ID\nDatum těžby: {datetime.now().strftime('%d.%m.%Y %H:%M')}\n" + "-"*30 + "\n"
     
     start_time = time.time()
     total_count = len(tickets_to_process)
@@ -383,11 +363,8 @@ if st.session_state.process_running:
         
         t_num = t_obj.get('name')
         status_placeholder.markdown(f"📥 Zpracovávám ticket **{idx + 1}/{total_count}**: `{t_num}`")
-        id_list_txt += f"{t_num}\n"
         
         try:
-            # --- API VOLÁNÍ AKTIVIT ---
-            # Retry logika
             acts = []
             for attempt in range(3):
                 try:
@@ -401,7 +378,6 @@ if st.session_state.process_running:
             t_date, t_time = format_date_split(t_obj.get('created'))
             t_status = t_obj.get('statuses', [{}])[0].get('title', 'N/A') if isinstance(t_obj.get('statuses'), list) and t_obj.get('statuses') else "N/A"
             
-            # Detekce VIP
             custom_fields = t_obj.get('customFields', {})
             vip_list = custom_fields.get('vip', [])
             ticket_clientType = "VIP" if "→ VIP KLIENT ←" in vip_list else "Standard"
@@ -423,7 +399,6 @@ if st.session_state.process_running:
                 cleaned = clean_html(item.get('text') or act.get('description'))
                 if not cleaned: continue
                 
-                # Čištění šumu
                 if any(re.search(p, cleaned, re.IGNORECASE) for p in noise_patterns):
                     cleaned = "[AUTOMATICKÝ EMAIL BALÍKOBOTU]"
                 else:
@@ -464,7 +439,6 @@ if st.session_state.process_running:
         except Exception as e:
             pass 
 
-        # Update Progress
         progress = (idx + 1) / total_count
         pbar.progress(progress)
         
@@ -474,14 +448,17 @@ if st.session_state.process_running:
             remaining_sec = (total_count - (idx + 1)) * avg_per_item
             eta_placeholder.caption(f"⏱️ Zbývá cca: {int(remaining_sec)} sekund")
 
-    # Konec procesu
+    # Uložení ID zpracovaných ticketů do finálního souboru
+    final_ids_list = "SEZNAM ZPRACOVANÝCH ID\nDatum těžby: {}\n------------------------------\n".format(datetime.now().strftime('%d.%m.%Y %H:%M'))
+    final_ids_list += "\n".join([str(t['ticket_number']) for t in full_export_data])
+
     st.session_state.stats = {
         "tickets": len(full_export_data),
         "activities": sum(len(t['activities']) for t in full_export_data),
         "size": f"{len(json.dumps(full_export_data).encode('utf-8')) / 1024:.1f} KB"
     }
     st.session_state.export_data = full_export_data
-    st.session_state.id_list_txt = id_list_txt
+    st.session_state.id_list_txt = final_ids_list
     st.session_state.results_ready = True
     st.session_state.process_running = False
     st.rerun()
@@ -499,15 +476,21 @@ if st.session_state.results_ready:
 
     st.write("")
     
-    # Serializace
+    # Generování názvů souborů
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    cat_slug = slugify(selected_cat)
+    stat_slug = slugify(selected_stat)
+    
+    file_name_data = f"data_{cat_slug}_{stat_slug}_{ts}.json"
+    file_name_ids = f"tickets_{cat_slug}_{stat_slug}_{ts}.txt"
+
     json_data = json.dumps(st.session_state.export_data, ensure_ascii=False, indent=2)
-    cat_slug = slugify(st.session_state.get('categories', [{'name': 'all'}])[0]['name']) # fallback pro jméno
     
     col_dl1, col_dl2 = st.columns(2)
     with col_dl1:
-        st.download_button(label="💾 STÁHNOUT JSON DATA", data=json_data, file_name=f"export_harvest.json", mime="application/json", use_container_width=True)
+        st.download_button(label="💾 STÁHNOUT JSON DATA", data=json_data, file_name=file_name_data, mime="application/json", use_container_width=True)
     with col_dl2:
-        st.download_button(label="🆔 STÁHNOUT SEZNAM ID", data=st.session_state.id_list_txt, file_name=f"seznam_id_harvest.txt", use_container_width=True)
+        st.download_button(label="🆔 STÁHNOUT SEZNAM ID", data=st.session_state.id_list_txt, file_name=file_name_ids, use_container_width=True)
 
     st.markdown("**Náhled dat (první ticket):**")
     preview = json.dumps(st.session_state.export_data[0] if st.session_state.export_data else {}, ensure_ascii=False, indent=2)
