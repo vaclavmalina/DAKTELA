@@ -23,7 +23,6 @@ if not st.session_state.authenticated:
         
         with st.form("login_form"):
             password_input = st.text_input("Heslo", type="password")
-            # Tlačítko uvnitř formuláře reaguje na Enter
             submitted = st.form_submit_button("Přihlásit se", use_container_width=True)
 
     if submitted:
@@ -103,6 +102,82 @@ def identify_side(title, email, is_user=False):
         if (slug and f"@{slug}." in clean_email) or (slug and clean_email.endswith(f"@{slug}.com")) or (name.lower() in clean_title):
             return f"Dopravce ({name})"
     return f"Klient ({title})" if title else "Klient"
+
+# --- GLOBÁLNÍ CALLBACK FUNKCE (Musí být zde, aby byly viditelné) ---
+def set_date_range(d_from, d_to):
+    st.session_state.filter_date_from = d_from
+    st.session_state.filter_date_to = d_to
+
+def cb_this_year():
+    set_date_range(date(date.today().year, 1, 1), date.today())
+
+def cb_last_year():
+    today = date.today()
+    last_year = today.year - 1
+    set_date_range(date(last_year, 1, 1), date(last_year, 12, 31))
+
+def cb_last_half_year():
+    today = date.today()
+    first_of_this_month = today.replace(day=1)
+    last_of_prev_month = first_of_this_month - timedelta(days=1)
+    start_month = first_of_this_month.month - 6
+    start_year = first_of_this_month.year
+    if start_month <= 0:
+        start_month += 12
+        start_year -= 1
+    set_date_range(date(start_year, start_month, 1), last_of_prev_month)
+
+def cb_last_3_months():
+    today = date.today()
+    first_of_this_month = today.replace(day=1)
+    last_of_prev_month = first_of_this_month - timedelta(days=1)
+    start_month = first_of_this_month.month - 3
+    start_year = first_of_this_month.year
+    if start_month <= 0:
+        start_month += 12
+        start_year -= 1
+    set_date_range(date(start_year, start_month, 1), last_of_prev_month)
+
+def cb_last_month():
+    today = date.today()
+    first_of_this_month = today.replace(day=1)
+    last_of_prev_month = first_of_this_month - timedelta(days=1)
+    first_of_prev_month = last_of_prev_month.replace(day=1)
+    set_date_range(first_of_prev_month, last_of_prev_month)
+
+def cb_this_month():
+    set_date_range(date.today().replace(day=1), date.today())
+
+def cb_last_week():
+    today = date.today()
+    start_of_this_week = today - timedelta(days=today.weekday())
+    start_of_last_week = start_of_this_week - timedelta(weeks=1)
+    end_of_last_week = start_of_last_week + timedelta(days=6)
+    set_date_range(start_of_last_week, end_of_last_week)
+
+def cb_this_week():
+    today = date.today()
+    start_of_this_week = today - timedelta(days=today.weekday())
+    set_date_range(start_of_this_week, today)
+
+def cb_yesterday():
+    yesterday = date.today() - timedelta(days=1)
+    set_date_range(yesterday, yesterday)
+
+def reset_cat_callback():
+    st.session_state.sb_category = "VŠE (bez filtru)"
+    st.session_state.selected_cat_key = "ALL"
+
+def reset_stat_callback():
+    st.session_state.sb_status = "VŠE (bez filtru)"
+    st.session_state.selected_stat_key = "ALL"
+
+def get_index(options_dict, current_val_key):
+    found_key = next((k for k, v in options_dict.items() if v == current_val_key), "VŠE (bez filtru)")
+    try:
+        return list(options_dict.keys()).index(found_key)
+    except ValueError:
+        return 0
 
 # --- HLAVNÍ UI ---
 st.set_page_config(page_title="Balíkobot Data Centrum", layout="centered", initial_sidebar_state="collapsed")
@@ -222,36 +297,14 @@ elif st.session_state.current_app == "harvester":
     stat_options_map = {"VŠE (bez filtru)": "ALL"}
     stat_options_map.update({s['title']: s['name'] for s in st.session_state['statuses']})
 
-    # --- CALLBACKY ---
-    def set_date_range(d_from, d_to): st.session_state.filter_date_from = d_from; st.session_state.filter_date_to = d_to
-    def cb_this_year(): set_date_range(date(date.today().year, 1, 1), date.today())
-    def cb_last_year(): today = date.today(); last_year = today.year - 1; set_date_range(date(last_year, 1, 1), date(last_year, 12, 31))
-    def cb_last_half_year(): today = date.today(); first_of_this_month = today.replace(day=1); last_of_prev_month = first_of_this_month - timedelta(days=1); start_month = first_of_this_month.month - 6; start_year = first_of_this_month.year; 
-    if start_month <= 0: start_month += 12; start_year -= 1; set_date_range(date(start_year, start_month, 1), last_of_prev_month)
-    def cb_last_3_months(): today = date.today(); first_of_this_month = today.replace(day=1); last_of_prev_month = first_of_this_month - timedelta(days=1); start_month = first_of_this_month.month - 3; start_year = first_of_this_month.year; 
-    if start_month <= 0: start_month += 12; start_year -= 1; set_date_range(date(start_year, start_month, 1), last_of_prev_month)
-    def cb_last_month(): today = date.today(); first_of_this_month = today.replace(day=1); last_of_prev_month = first_of_this_month - timedelta(days=1); first_of_prev_month = last_of_prev_month.replace(day=1); set_date_range(first_of_prev_month, last_of_prev_month)
-    def cb_this_month(): set_date_range(date.today().replace(day=1), date.today())
-    def cb_last_week(): today = date.today(); start_of_this_week = today - timedelta(days=today.weekday()); start_of_last_week = start_of_this_week - timedelta(weeks=1); end_of_last_week = start_of_last_week + timedelta(days=6); set_date_range(start_of_last_week, end_of_last_week)
-    def cb_this_week(): today = date.today(); start_of_this_week = today - timedelta(days=today.weekday()); set_date_range(start_of_this_week, today)
-    def cb_yesterday(): yesterday = date.today() - timedelta(days=1); set_date_range(yesterday, yesterday)
-
-    def reset_cat_callback(): st.session_state.sb_category = "VŠE (bez filtru)"; st.session_state.selected_cat_key = "ALL"
-    def reset_stat_callback(): st.session_state.sb_status = "VŠE (bez filtru)"; st.session_state.selected_stat_key = "ALL"
-    def get_index(options_dict, current_val_key):
-        found_key = next((k for k, v in options_dict.items() if v == current_val_key), "VŠE (bez filtru)")
-        try: return list(options_dict.keys()).index(found_key)
-        except ValueError: return 0
-
     # -------------------------------------------------------------------------
     # STRIKTNÍ LOGIKA ŘÍZENÍ UI (STATE MACHINE)
-    # Vždy se vykreslí POUZE JEDEN blok podle stavu.
     # -------------------------------------------------------------------------
 
     # >>> BLOK A: BĚŽÍ PROCES (STEP 3) <<<
     if st.session_state.process_running:
         
-        # Info o filtru nad loadingem (Přehledně v kontejneru)
+        # Info o filtru nad loadingem
         with st.container(border=True):
             st.info(f"**Právě zpracovávám data pro:**\n\n"
                     f"📅 **Období:** {st.session_state.filter_date_from.strftime('%d.%m.%Y')} - {st.session_state.filter_date_to.strftime('%d.%m.%Y')}\n\n"
@@ -356,7 +409,6 @@ elif st.session_state.current_app == "harvester":
         st.divider()
         st.success("🎉 Těžba dokončena!")
         
-        # Info o filtru (Přehledně pod sebou)
         st.info(f"**Použitý filtr:**\n\n"
                 f"📅 **Období:** {st.session_state.filter_date_from.strftime('%d.%m.%Y')} - {st.session_state.filter_date_to.strftime('%d.%m.%Y')}\n\n"
                 f"📂 **Kategorie:** {next((k for k,v in cat_options_map.items() if v == st.session_state.selected_cat_key), 'VŠE')}\n\n"
@@ -381,8 +433,6 @@ elif st.session_state.current_app == "harvester":
         with col_dl2: st.download_button(label="🆔 STÁHNOUT SEZNAM ID", data=st.session_state.id_list_txt, file_name=file_name_ids, use_container_width=True)
 
         st.write("")
-        
-        # Tlačítko Reset přesunuto dolů pod download
         if st.button("🔄 Začít znovu / Nová analýza", type="primary", use_container_width=True):
             st.session_state.results_ready = False
             st.session_state.search_performed = False
@@ -394,7 +444,6 @@ elif st.session_state.current_app == "harvester":
 
     # >>> BLOK C: NASTAVENÍ (STEP 1 & 2) <<<
     else:
-        # Zobrazí se jen pokud NEBĚŽÍ proces a NEJSOU výsledky
         with st.container():
             st.subheader("1. Nastavení filtru")
             c_date1, c_date2 = st.columns(2)
@@ -436,11 +485,10 @@ elif st.session_state.current_app == "harvester":
                         st.session_state.search_performed = True
                     except Exception as e: st.error(f"Chyba při komunikaci s API: {e}")
 
-        # STEP 2: VÝSLEDEK HLEDÁNÍ (vnořeno v else bloku, aby se skrylo při process_running)
+        # STEP 2: VÝSLEDEK HLEDÁNÍ (vnořeno v else bloku)
         if st.session_state.search_performed:
             st.divider()
             
-            # Centrování tlačítka Zavřít
             col_x1, col_x2, col_x3 = st.columns([1, 2, 1])
             with col_x2:
                 if st.button("❌ Zavřít výsledky a upravit zadání", use_container_width=True):
@@ -460,7 +508,6 @@ elif st.session_state.current_app == "harvester":
                 
                 found_ids_txt = "\n".join([str(t.get('name', '')) for t in st.session_state.found_tickets])
                 
-                # Centrování tlačítka Stáhnout ID
                 col_d1, col_d2, col_d3 = st.columns([1, 2, 1])
                 with col_d2:
                     st.download_button(label="⬇️ Stáhnout nalezená ID (TXT)", data=found_ids_txt, file_name=f"tickets_{c_name}_{s_name}_{ts}.txt", mime="text/plain", use_container_width=True)
