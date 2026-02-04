@@ -134,12 +134,10 @@ if 'filter_date_to' not in st.session_state: st.session_state.filter_date_to = d
 if 'categories' not in st.session_state:
     try:
         res_cat = requests.get(f"{INSTANCE_URL}/api/v6/ticketsCategories.json", headers={'x-auth-token': ACCESS_TOKEN})
-        # ZMĚNA: Řazení kategorií podle abecedy (A-Z)
         cat_data = res_cat.json().get('result', {}).get('data', [])
         st.session_state['categories'] = sorted(cat_data, key=lambda x: x.get('title', '').lower())
         
         res_stat = requests.get(f"{INSTANCE_URL}/api/v6/statuses.json", headers={'x-auth-token': ACCESS_TOKEN})
-        # ZMĚNA: Řazení statusů podle abecedy (A-Z)
         stat_data = res_stat.json().get('result', {}).get('data', [])
         st.session_state['statuses'] = sorted(stat_data, key=lambda x: x.get('title', '').lower())
     except:
@@ -158,29 +156,37 @@ if not st.session_state.process_running and not st.session_state.results_ready:
         with c_date2:
             d_to = st.date_input("Datum do", value=st.session_state.filter_date_to, format="DD.MM.YYYY")
         
-        # Aktualizace state, pokud uživatel změnil input ručně
+        # Aktualizace state
         st.session_state.filter_date_from = d_from
         st.session_state.filter_date_to = d_to
 
-        # B) RYCHLÉ VOLBY (2 řady po 4 tlačítkách)
+        # B) RYCHLÉ VOLBY (3 řady po 3 tlačítkách = 9 tlačítek)
         st.caption("Rychlý výběr období:")
         
-        # První řada (4 tlačítka)
-        b_r1 = st.columns(4)
+        # --- ŘADA 1 ---
+        b_r1 = st.columns(3)
         
         # 1. TENTO ROK
         if b_r1[0].button("Tento rok", use_container_width=True):
             st.session_state.filter_date_from = date(date.today().year, 1, 1)
             st.session_state.filter_date_to = date.today()
             st.rerun()
-            
-        # 2. POSLEDNÍ PŮL ROK (Kalendářně: 6 celých měsíců zpět)
-        if b_r1[1].button("Poslední půl rok", use_container_width=True):
+
+        # 2. MINULÝ ROK (NOVÉ)
+        if b_r1[1].button("Minulý rok", use_container_width=True):
+            today = date.today()
+            last_year = today.year - 1
+            st.session_state.filter_date_from = date(last_year, 1, 1)
+            st.session_state.filter_date_to = date(last_year, 12, 31)
+            st.rerun()
+
+        # 3. POSLEDNÍ PŮL ROK (Kalendářně: 6 celých měsíců zpět)
+        if b_r1[2].button("Poslední půl rok", use_container_width=True):
             today = date.today()
             first_of_this_month = today.replace(day=1)
             last_of_prev_month = first_of_this_month - timedelta(days=1)
             
-            # Výpočet startu: -6 měsíců od začátku aktuálního měsíce
+            # Výpočet startu: -6 měsíců
             start_month = first_of_this_month.month - 6
             start_year = first_of_this_month.year
             if start_month <= 0:
@@ -192,13 +198,16 @@ if not st.session_state.process_running and not st.session_state.results_ready:
             st.session_state.filter_date_to = last_of_prev_month
             st.rerun()
 
-        # 3. POSLEDNÍ 3 MĚSÍCE (Kalendářně: 3 celé měsíce zpět)
-        if b_r1[2].button("Poslední 3 měsíce", use_container_width=True):
+        # --- ŘADA 2 ---
+        b_r2 = st.columns(3)
+
+        # 4. POSLEDNÍ 3 MĚSÍCE (Kalendářně: 3 celé měsíce zpět)
+        if b_r2[0].button("Poslední 3 měsíce", use_container_width=True):
             today = date.today()
             first_of_this_month = today.replace(day=1)
             last_of_prev_month = first_of_this_month - timedelta(days=1)
             
-            # Výpočet startu: -3 měsíce od začátku aktuálního měsíce
+            # Výpočet startu: -3 měsíce
             start_month = first_of_this_month.month - 3
             start_year = first_of_this_month.year
             if start_month <= 0:
@@ -210,8 +219,8 @@ if not st.session_state.process_running and not st.session_state.results_ready:
             st.session_state.filter_date_to = last_of_prev_month
             st.rerun()
 
-        # 4. MINULÝ MĚSÍC (Kalendářní)
-        if b_r1[3].button("Minulý měsíc", use_container_width=True):
+        # 5. MINULÝ MĚSÍC (Kalendářní)
+        if b_r2[1].button("Minulý měsíc", use_container_width=True):
             today = date.today()
             first_of_this_month = today.replace(day=1)
             last_of_prev_month = first_of_this_month - timedelta(days=1)
@@ -221,17 +230,17 @@ if not st.session_state.process_running and not st.session_state.results_ready:
             st.session_state.filter_date_to = last_of_prev_month
             st.rerun()
 
-        # Druhá řada (4 tlačítka)
-        b_r2 = st.columns(4)
-
-        # 5. TENTO MĚSÍC
-        if b_r2[0].button("Tento měsíc", use_container_width=True):
+        # 6. TENTO MĚSÍC
+        if b_r2[2].button("Tento měsíc", use_container_width=True):
             st.session_state.filter_date_from = date.today().replace(day=1)
             st.session_state.filter_date_to = date.today()
             st.rerun()
 
-        # 6. MINULÝ TÝDEN (Po-Ne)
-        if b_r2[1].button("Minulý týden", use_container_width=True):
+        # --- ŘADA 3 ---
+        b_r3 = st.columns(3)
+
+        # 7. MINULÝ TÝDEN (Po-Ne)
+        if b_r3[0].button("Minulý týden", use_container_width=True):
             today = date.today()
             start_of_this_week = today - timedelta(days=today.weekday()) # Po tohoto týdne
             start_of_last_week = start_of_this_week - timedelta(weeks=1) # Po min. týdne
@@ -241,16 +250,16 @@ if not st.session_state.process_running and not st.session_state.results_ready:
             st.session_state.filter_date_to = end_of_last_week
             st.rerun()
 
-        # 7. TENTO TÝDEN (Po-Dnes)
-        if b_r2[2].button("Tento týden", use_container_width=True):
+        # 8. TENTO TÝDEN (Po-Dnes)
+        if b_r3[1].button("Tento týden", use_container_width=True):
             today = date.today()
             start_of_this_week = today - timedelta(days=today.weekday())
             st.session_state.filter_date_from = start_of_this_week
             st.session_state.filter_date_to = today
             st.rerun()
 
-        # 8. VČEREJŠEK
-        if b_r2[3].button("Včerejšek", use_container_width=True):
+        # 9. VČEREJŠEK
+        if b_r3[2].button("Včerejšek", use_container_width=True):
             yesterday = date.today() - timedelta(days=1)
             st.session_state.filter_date_from = yesterday
             st.session_state.filter_date_to = yesterday
@@ -281,11 +290,11 @@ if not st.session_state.process_running and not st.session_state.results_ready:
                     "filter[filters][1][field]": "created", "filter[filters][1][operator]": "lte", "filter[filters][1][value]": f"{st.session_state.filter_date_to} 23:59:59",
                     "filter[filters][2][field]": "category", "filter[filters][2][operator]": "eq", "filter[filters][2][value]": cat_options[selected_cat],
                     "filter[filters][3][field]": "statuses", "filter[filters][3][operator]": "eq", "filter[filters][3][value]": stat_options[selected_stat],
-                    "take": 1000, # Pro hledání stačí list
-                    "fields[0]": "name", # Optimalizace: stahujeme jen jména/ID
+                    "take": 1000, 
+                    "fields[0]": "name", 
                     "fields[1]": "title",
                     "fields[2]": "created",
-                    "fields[3]": "customFields", # Pro budoucí logiku
+                    "fields[3]": "customFields", 
                     "fields[4]": "category",
                     "fields[5]": "statuses"
                 }
@@ -302,7 +311,13 @@ if not st.session_state.process_running and not st.session_state.results_ready:
 # --- STEP 2: VÝSLEDEK HLEDÁNÍ & LIMIT ---
 if st.session_state.search_performed and not st.session_state.process_running and not st.session_state.results_ready:
     st.divider()
-    st.subheader("2. Výsledek hledání & Limit")
+    
+    # NOVÉ: Tlačítko zpět, které resetuje hledání a umožní znovu nastavit filtry
+    if st.button("⬅️ Změnit filtr / Hledat znovu"):
+        st.session_state.search_performed = False
+        st.rerun()
+
+    st.subheader("2. Výsledek hledání")
     
     count = len(st.session_state.found_tickets)
     if count == 0:
@@ -311,6 +326,16 @@ if st.session_state.search_performed and not st.session_state.process_running an
         st.success(f"✅ Nalezeno **{count}** ticketů.")
         if count == 1000:
             st.info("ℹ️ API vrátilo maximální počet 1000 položek. Pokud potřebujete víc, zúžete období.")
+
+        # NOVÉ: Tlačítko pro okamžité stažení seznamu ID
+        found_ids_txt = "\n".join([t.get('name', '') for t in st.session_state.found_tickets])
+        st.download_button(
+            label="⬇️ Stáhnout nalezená ID (TXT)", 
+            data=found_ids_txt, 
+            file_name=f"found_tickets_ids.txt", 
+            mime="text/plain"
+        )
+        st.write("") # Mezera
 
         st.write("Kolik ticketů chcete hloubkově zpracovat (stáhnout aktivity, e-maily)?")
         limit_val = st.number_input("Limit (0 = zpracovat všechny nalezené)", min_value=0, max_value=count, value=min(count, 50))
