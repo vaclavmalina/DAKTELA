@@ -312,7 +312,7 @@ if not st.session_state.process_running and not st.session_state.results_ready:
 if st.session_state.search_performed and not st.session_state.process_running and not st.session_state.results_ready:
     st.divider()
     
-    # NOVÉ: Tlačítko zpět, které resetuje hledání a umožní znovu nastavit filtry
+    # Tlačítko zpět, které resetuje hledání a umožní znovu nastavit filtry
     if st.button("⬅️ Změnit filtr / Hledat znovu"):
         st.session_state.search_performed = False
         st.rerun()
@@ -327,8 +327,8 @@ if st.session_state.search_performed and not st.session_state.process_running an
         if count == 1000:
             st.info("ℹ️ API vrátilo maximální počet 1000 položek. Pokud potřebujete víc, zúžete období.")
 
-        # NOVÉ: Tlačítko pro okamžité stažení seznamu ID
-        found_ids_txt = "\n".join([t.get('name', '') for t in st.session_state.found_tickets])
+        # Tlačítko pro okamžité stažení seznamu ID (OPRAVENO: Převod na string)
+        found_ids_txt = "\n".join([str(t.get('name', '')) for t in st.session_state.found_tickets])
         st.download_button(
             label="⬇️ Stáhnout nalezená ID (TXT)", 
             data=found_ids_txt, 
