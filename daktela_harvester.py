@@ -130,13 +130,18 @@ if 'search_performed' not in st.session_state: st.session_state.search_performed
 if 'filter_date_from' not in st.session_state: st.session_state.filter_date_from = date.today().replace(day=1)
 if 'filter_date_to' not in st.session_state: st.session_state.filter_date_to = date.today()
 
-# Načtení číselníků při startu, pokud nejsou
+# Načtení číselníků při startu
 if 'categories' not in st.session_state:
     try:
         res_cat = requests.get(f"{INSTANCE_URL}/api/v6/ticketsCategories.json", headers={'x-auth-token': ACCESS_TOKEN})
-        st.session_state['categories'] = res_cat.json().get('result', {}).get('data', [])
+        # ZMĚNA: Řazení kategorií podle abecedy (A-Z)
+        cat_data = res_cat.json().get('result', {}).get('data', [])
+        st.session_state['categories'] = sorted(cat_data, key=lambda x: x.get('title', '').lower())
+        
         res_stat = requests.get(f"{INSTANCE_URL}/api/v6/statuses.json", headers={'x-auth-token': ACCESS_TOKEN})
-        st.session_state['statuses'] = res_stat.json().get('result', {}).get('data', [])
+        # ZMĚNA: Řazení statusů podle abecedy (A-Z)
+        stat_data = res_stat.json().get('result', {}).get('data', [])
+        st.session_state['statuses'] = sorted(stat_data, key=lambda x: x.get('title', '').lower())
     except:
         st.error("Nepodařilo se načíst číselníky. Zkontrolujte připojení nebo TOKEN.")
         st.stop()
@@ -157,30 +162,56 @@ if not st.session_state.process_running and not st.session_state.results_ready:
         st.session_state.filter_date_from = d_from
         st.session_state.filter_date_to = d_to
 
-        # B) RYCHLÉ VOLBY (Tlačítka pod datumem)
+        # B) RYCHLÉ VOLBY (2 řady po 4 tlačítkách)
         st.caption("Rychlý výběr období:")
-        b_cols = st.columns(6)
         
-        # 1. TENTO ROK (Od 1.1. do dneška)
-        if b_cols[0].button("Tento rok", use_container_width=True):
+        # První řada (4 tlačítka)
+        b_r1 = st.columns(4)
+        
+        # 1. TENTO ROK
+        if b_r1[0].button("Tento rok", use_container_width=True):
             st.session_state.filter_date_from = date(date.today().year, 1, 1)
             st.session_state.filter_date_to = date.today()
             st.rerun()
             
-        # 2. POSLEDNÍCH 30 DNÍ (Klouzavé okno)
-        if b_cols[1].button("30 dní", use_container_width=True, help="Posledních 30 dní od dneška"):
-            st.session_state.filter_date_from = date.today() - timedelta(days=30)
-            st.session_state.filter_date_to = date.today()
-            st.rerun()
+        # 2. POSLEDNÍ PŮL ROK (Kalendářně: 6 celých měsíců zpět)
+        if b_r1[1].button("Poslední půl rok", use_container_width=True):
+            today = date.today()
+            first_of_this_month = today.replace(day=1)
+            last_of_prev_month = first_of_this_month - timedelta(days=1)
             
-        # 3. TENTO MĚSÍC (Od 1. dne v měsíci do dneška)
-        if b_cols[2].button("Tento měsíc", use_container_width=True):
-            st.session_state.filter_date_from = date.today().replace(day=1)
-            st.session_state.filter_date_to = date.today()
+            # Výpočet startu: -6 měsíců od začátku aktuálního měsíce
+            start_month = first_of_this_month.month - 6
+            start_year = first_of_this_month.year
+            if start_month <= 0:
+                start_month += 12
+                start_year -= 1
+            start_date = date(start_year, start_month, 1)
+
+            st.session_state.filter_date_from = start_date
+            st.session_state.filter_date_to = last_of_prev_month
             st.rerun()
 
-        # 4. MINULÝ MĚSÍC (Celý předchozí kalendářní měsíc, např. 1.1.-31.1.)
-        if b_cols[3].button("Minulý měsíc", use_container_width=True):
+        # 3. POSLEDNÍ 3 MĚSÍCE (Kalendářně: 3 celé měsíce zpět)
+        if b_r1[2].button("Poslední 3 měsíce", use_container_width=True):
+            today = date.today()
+            first_of_this_month = today.replace(day=1)
+            last_of_prev_month = first_of_this_month - timedelta(days=1)
+            
+            # Výpočet startu: -3 měsíce od začátku aktuálního měsíce
+            start_month = first_of_this_month.month - 3
+            start_year = first_of_this_month.year
+            if start_month <= 0:
+                start_month += 12
+                start_year -= 1
+            start_date = date(start_year, start_month, 1)
+
+            st.session_state.filter_date_from = start_date
+            st.session_state.filter_date_to = last_of_prev_month
+            st.rerun()
+
+        # 4. MINULÝ MĚSÍC (Kalendářní)
+        if b_r1[3].button("Minulý měsíc", use_container_width=True):
             today = date.today()
             first_of_this_month = today.replace(day=1)
             last_of_prev_month = first_of_this_month - timedelta(days=1)
@@ -190,20 +221,36 @@ if not st.session_state.process_running and not st.session_state.results_ready:
             st.session_state.filter_date_to = last_of_prev_month
             st.rerun()
 
-        # 5. MINULÝ TÝDEN (Předchozí Pondělí - Neděle)
-        if b_cols[4].button("Minulý týden", use_container_width=True):
+        # Druhá řada (4 tlačítka)
+        b_r2 = st.columns(4)
+
+        # 5. TENTO MĚSÍC
+        if b_r2[0].button("Tento měsíc", use_container_width=True):
+            st.session_state.filter_date_from = date.today().replace(day=1)
+            st.session_state.filter_date_to = date.today()
+            st.rerun()
+
+        # 6. MINULÝ TÝDEN (Po-Ne)
+        if b_r2[1].button("Minulý týden", use_container_width=True):
             today = date.today()
-            # weekday(): Pondělí = 0, Neděle = 6
-            start_of_this_week = today - timedelta(days=today.weekday()) # Pondělí tohoto týdne
-            start_of_last_week = start_of_this_week - timedelta(weeks=1) # Pondělí minulého týdne
-            end_of_last_week = start_of_last_week + timedelta(days=6) # Neděle minulého týdne (Pondělí + 6 dní)
+            start_of_this_week = today - timedelta(days=today.weekday()) # Po tohoto týdne
+            start_of_last_week = start_of_this_week - timedelta(weeks=1) # Po min. týdne
+            end_of_last_week = start_of_last_week + timedelta(days=6) # Ne min. týdne
             
             st.session_state.filter_date_from = start_of_last_week
             st.session_state.filter_date_to = end_of_last_week
             st.rerun()
-            
-        # 6. VČERA
-        if b_cols[5].button("Včera", use_container_width=True):
+
+        # 7. TENTO TÝDEN (Po-Dnes)
+        if b_r2[2].button("Tento týden", use_container_width=True):
+            today = date.today()
+            start_of_this_week = today - timedelta(days=today.weekday())
+            st.session_state.filter_date_from = start_of_this_week
+            st.session_state.filter_date_to = today
+            st.rerun()
+
+        # 8. VČEREJŠEK
+        if b_r2[3].button("Včerejšek", use_container_width=True):
             yesterday = date.today() - timedelta(days=1)
             st.session_state.filter_date_from = yesterday
             st.session_state.filter_date_to = yesterday
@@ -446,4 +493,3 @@ if st.session_state.results_ready:
         st.session_state.results_ready = False
         st.session_state.search_performed = False
         st.rerun()
-
