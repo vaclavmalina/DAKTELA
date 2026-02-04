@@ -106,7 +106,7 @@ def identify_side(title, email, is_user=False):
     return f"Klient ({title})" if title else "Klient"
 
 # --- 4. STREAMLIT UI ---
-st.set_page_config(page_title="Daktela Harvester", layout="centered", page_icon="🗃️", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Daktela", layout="centered", initial_sidebar_state="collapsed")
 
 # Skrytí sidebaru
 st.markdown("""
@@ -116,7 +116,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<h1 style='text-align: center;'>🗃️ Daktela Harvester</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center;'>Daktela</h1>", unsafe_allow_html=True)
 
 # --- SESSION STATE INICIALIZACE ---
 if 'process_running' not in st.session_state: st.session_state.process_running = False
@@ -355,18 +355,18 @@ if st.session_state.search_performed and not st.session_state.process_running an
         found_ids_txt = "\n".join([str(t.get('name', '')) for t in st.session_state.found_tickets])
         
         st.download_button(
-            label="⬇️ Stáhnout nalezená ID (TXT)", 
+            label="⬇️ Stáhnout nalezená ID", 
             data=found_ids_txt, 
             file_name=file_name_ids, 
             mime="text/plain"
         )
         st.write("")
 
-        st.write("Kolik ticketů chcete hloubkově zpracovat (stáhnout aktivity, e-maily)?")
+        st.write("Kolik ticketů si přejete zpracovat?")
         limit_val = st.number_input("Limit (0 = zpracovat všechny nalezené)", min_value=0, max_value=count, value=min(count, 50))
         
         st.write("")
-        if st.button("⛏️ SPUSTIT HLOUBKOVOU TĚŽBU", type="primary", use_container_width=True):
+        if st.button("⛏️ SPUSTIT ZPRACOVÁNÍ DAT", type="primary", use_container_width=True):
             st.session_state.final_limit = limit_val
             st.session_state.process_running = True
             st.session_state.stop_requested = False
@@ -543,14 +543,15 @@ if st.session_state.results_ready:
     with col_dl1:
         st.download_button(label="💾 STÁHNOUT JSON DATA", data=json_data, file_name=file_name_data, mime="application/json", use_container_width=True)
     with col_dl2:
-        st.download_button(label="🆔 STÁHNOUT SEZNAM ID", data=st.session_state.id_list_txt, file_name=file_name_ids, use_container_width=True)
+        st.download_button(label="🆔 STÁHNOUT SEZNAM TICKETŮ", data=st.session_state.id_list_txt, file_name=file_name_ids, use_container_width=True)
 
     st.markdown("**Náhled dat (první ticket):**")
     preview = json.dumps(st.session_state.export_data[0] if st.session_state.export_data else {}, ensure_ascii=False, indent=2)
     st.code(preview, language="json")
     st.markdown("""<style> div[data-testid="stCodeBlock"] > div { overflow-y: auto; height: 300px; } </style>""", unsafe_allow_html=True)
     
-    if st.button("🔄 Začít znovu (Reset)", use_container_width=True):
+    if st.button("🔄 Začít znovU", use_container_width=True):
         st.session_state.results_ready = False
         st.session_state.search_performed = False
         st.rerun()
+
