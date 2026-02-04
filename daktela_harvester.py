@@ -106,7 +106,6 @@ def identify_side(title, email, is_user=False):
 # --- HLAVNÍ UI ---
 st.set_page_config(page_title="Balíkobot Data Centrum", layout="centered", initial_sidebar_state="collapsed")
 
-# Profesionální CSS pro Dashboard tlačítka
 st.markdown("""
     <style>
         [data-testid="stSidebar"] {display: none;}
@@ -148,7 +147,7 @@ st.markdown("""
 if 'current_app' not in st.session_state:
     st.session_state.current_app = "dashboard"
 
-# Pomocná funkce pro zobrazení WIP zprávy (Toast - neposouvá layout!)
+# Pomocná funkce pro zobrazení WIP zprávy
 def show_wip_msg(module_name):
     st.toast(f"🚧 Modul **{module_name}** je momentálně ve vývoji.", icon="🛠️")
 
@@ -228,7 +227,7 @@ elif st.session_state.current_app == "harvester":
             st.error("Nepodařilo se načíst číselníky.")
             st.stop()
 
-    # --- DEFINICE MAPOVÁNÍ GLOBÁLNĚ PRO TUTO SEKCI ---
+    # --- DEFINICE MAPOVÁNÍ GLOBÁLNĚ ---
     cat_options_map = {"VŠE (bez filtru)": "ALL"}
     cat_options_map.update({c['title']: c['name'] for c in st.session_state['categories']})
     
@@ -271,8 +270,12 @@ elif st.session_state.current_app == "harvester":
         try: return list(options_dict.keys()).index(found_key)
         except ValueError: return 0
 
-    # --- STEP 1: FILTRY ---
+    # --- HLAVNÍ LOGIKA APLIKACE (STEP 1-4) ---
+    
+    # 1. Pokud NEBĚŽÍ proces a NEJSOU výsledky -> Zobrazit Filtry + Výsledky hledání (Step 1 + Step 2)
     if not st.session_state.process_running and not st.session_state.results_ready:
+        
+        # STEP 1: FILTRY
         with st.container():
             st.subheader("1. Nastavení filtru")
             c_date1, c_date2 = st.columns(2)
@@ -314,53 +317,71 @@ elif st.session_state.current_app == "harvester":
                         st.session_state.search_performed = True
                     except Exception as e: st.error(f"Chyba při komunikaci s API: {e}")
 
-    # --- STEP 2: VÝSLEDEK HLEDÁNÍ & LIMIT ---
-    if st.session_state.search_performed and not st.session_state.process_running and not st.session_state.results_ready:
-        st.divider()
-        if st.button("❌ Zavřít výsledky a upravit zadání"):
-            st.session_state.search_performed = False
-            st.rerun()
+        # STEP 2: VÝSLEDEK HLEDÁNÍ (Podmíněno tím, že proběhl search)
+        if st.session_state.search_performed:
+            st.divider()
+            
+            # Centrování tlačítka Zavřít
+            col_x1, col_x2, col_x3 = st.columns([1, 2, 1])
+            with col_x2:
+                if st.button("❌ Zavřít výsledky a upravit zadání", use_container_width=True):
+                    st.session_state.search_performed = False
+                    st.rerun()
 
-        st.subheader("2. Výsledek hledání")
-        count = len(st.session_state.found_tickets)
-        if count == 0: st.warning("⚠️ V zadaném období a nastavení nebyly nalezeny žádné tickety.")
-        else:
-            st.success(f"✅ Nalezeno **{count}** ticketů.")
-            if count == 1000: st.info("ℹ️ API vrátilo maximální počet 1000 položek.")
-            
-            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-            c_name = "VSE" if st.session_state.selected_cat_key == "ALL" else slugify(next((k for k,v in cat_options_map.items() if v == st.session_state.selected_cat_key), "cat"))
-            s_name = "VSE" if st.session_state.selected_stat_key == "ALL" else slugify(next((k for k,v in stat_options_map.items() if v == st.session_state.selected_stat_key), "stat"))
-            
-            found_ids_txt = "\n".join([str(t.get('name', '')) for t in st.session_state.found_tickets])
-            st.download_button(label="⬇️ Stáhnout nalezená ID (TXT)", data=found_ids_txt, file_name=f"tickets_{c_name}_{s_name}_{ts}.txt", mime="text/plain")
-            st.write("")
-            st.write("Kolik ticketů chcete hloubkově zpracovat?")
-            limit_val = st.number_input("Limit (0 = zpracovat všechny nalezené)", min_value=0, max_value=count, value=min(count, 50))
-            st.write("")
-            
-            # --- START PROCESU (Přesun na konec stránky) ---
-            if st.button("⛏️ SPUSTIT ZPRACOVÁNÍ DAT", type="primary", use_container_width=True):
-                st.session_state.final_limit = limit_val
-                st.session_state.process_running = True
-                st.session_state.stop_requested = False
-                st.rerun()
+            st.subheader("2. Výsledek hledání")
+            count = len(st.session_state.found_tickets)
+            if count == 0: st.warning("⚠️ V zadaném období a nastavení nebyly nalezeny žádné tickety.")
+            else:
+                st.success(f"✅ Nalezeno **{count}** ticketů.")
+                if count == 1000: st.info("ℹ️ API vrátilo maximální počet 1000 položek.")
+                
+                ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                c_name = "VSE" if st.session_state.selected_cat_key == "ALL" else slugify(next((k for k,v in cat_options_map.items() if v == st.session_state.selected_cat_key), "cat"))
+                s_name = "VSE" if st.session_state.selected_stat_key == "ALL" else slugify(next((k for k,v in stat_options_map.items() if v == st.session_state.selected_stat_key), "stat"))
+                
+                found_ids_txt = "\n".join([str(t.get('name', '')) for t in st.session_state.found_tickets])
+                
+                # Centrování tlačítka Stáhnout ID
+                col_d1, col_d2, col_d3 = st.columns([1, 2, 1])
+                with col_d2:
+                    st.download_button(label="⬇️ Stáhnout nalezená ID (TXT)", data=found_ids_txt, file_name=f"tickets_{c_name}_{s_name}_{ts}.txt", mime="text/plain", use_container_width=True)
+                
+                st.write("")
+                st.write("Kolik ticketů chcete hloubkově zpracovat?")
+                limit_val = st.number_input("Limit (0 = zpracovat všechny nalezené)", min_value=0, max_value=count, value=min(count, 50))
+                st.write("")
+                
+                if st.button("⛏️ SPUSTIT ZPRACOVÁNÍ DAT", type="primary", use_container_width=True):
+                    st.session_state.final_limit = limit_val
+                    st.session_state.process_running = True
+                    st.session_state.stop_requested = False
+                    st.rerun()
 
-    # --- STEP 3: PROCES TĚŽBY (LOOP) - DOLE ---
+    # --- STEP 3: LOADING SCREEN (Pokud běží proces) ---
+    # Tady se zobrazí jen loading screen, protože jsme nahoře v IFu ošetřili, že se Step 1+2 nezobrazí
     if st.session_state.process_running:
+        
+        # Info o filtru (Přehledně nad loadingem)
+        st.info(f"**Právě zpracovávám data pro:**\n\n"
+                f"📅 **Období:** {st.session_state.filter_date_from.strftime('%d.%m.%Y')} - {st.session_state.filter_date_to.strftime('%d.%m.%Y')}\n\n"
+                f"📂 **Kategorie:** {next((k for k,v in cat_options_map.items() if v == st.session_state.selected_cat_key), 'VŠE')}\n\n"
+                f"🏷️ **Status:** {next((k for k,v in stat_options_map.items() if v == st.session_state.selected_stat_key), 'VŠE')}")
+        
         st.divider()
         st.subheader("3. Probíhá těžba dat...")
-        if st.button("🛑 ZASTAVIT"):
-            st.session_state.stop_requested = True
-            st.session_state.process_running = False
-            st.rerun()
+        
+        col_stop1, col_stop2, col_stop3 = st.columns([1, 2, 1])
+        with col_stop2:
+            if st.button("🛑 ZASTAVIT PROCES", use_container_width=True):
+                st.session_state.stop_requested = True
+                st.session_state.process_running = False
+                st.rerun()
 
-        # Placeholdery pro výpis dole
         progress_bar = st.progress(0)
         status_text = st.empty()
         eta_text = st.empty()
 
-        # Logika
+        # Logika těžby...
         noise_patterns = [r"Potvrzujeme, že Vaše zpráva byla úspěšně doručena", r"Jelikož Vám chceme poskytnout nejlepší servis", r"dnes ve dnech .* čerpám dovolenou"]
         cut_off_patterns = [r"S pozdravem", r"S pozdravom", r"Kind regards", r"Regards", r"S přáním pěkného dne", r"S přáním hezkého dne", r"Děkuji\n", r"Ďakujem\n", r"Díky\n", r"Tento e-mail nepředstavuje nabídku", r"Pro případ, že tato zpráva obsahuje návrh smlouvy", r"Disclaimer:", r"Confidentiality Notice:", r"Myslete na životní prostředí", r"Please think about the environment"]
         history_patterns = [r"-{5,}", r"_{5,}", r"---------- Odpovězená zpráva ----------", r"Dne .* odesílatel .* napsal\(a\):", r"Od: .* Posláno: .*", r"---------- Původní e-mail ----------"]
@@ -441,20 +462,13 @@ elif st.session_state.current_app == "harvester":
     # --- STEP 4: VÝSLEDKY ---
     if st.session_state.results_ready:
         st.divider()
-        
-        # NOVÉ: Tlačítko Reset hned nahoře
-        if st.button("🔄 Začít znovu / Nová analýza", type="primary", use_container_width=True):
-            st.session_state.results_ready = False
-            st.session_state.search_performed = False
-            st.rerun()
-
         st.success("🎉 Těžba dokončena!")
         
-        # NOVÉ: Zobrazení použitých filtrů
-        st.info(f"**Použitý filtr:**\n"
-                f"📅 Období: {st.session_state.filter_date_from.strftime('%d.%m.%Y')} - {st.session_state.filter_date_to.strftime('%d.%m.%Y')}\n"
-                f"📂 Kategorie: {next((k for k,v in cat_options_map.items() if v == st.session_state.selected_cat_key), 'VŠE')}\n"
-                f"🏷️ Status: {next((k for k,v in stat_options_map.items() if v == st.session_state.selected_stat_key), 'VŠE')}")
+        # Info o filtru - rozděleno pod sebe
+        st.info(f"**Použitý filtr:**\n\n"
+                f"📅 **Období:** {st.session_state.filter_date_from.strftime('%d.%m.%Y')} - {st.session_state.filter_date_to.strftime('%d.%m.%Y')}\n\n"
+                f"📂 **Kategorie:** {next((k for k,v in cat_options_map.items() if v == st.session_state.selected_cat_key), 'VŠE')}\n\n"
+                f"🏷️ **Status:** {next((k for k,v in stat_options_map.items() if v == st.session_state.selected_stat_key), 'VŠE')}")
 
         s = st.session_state.stats
         c1, c2, c3 = st.columns(3)
@@ -473,6 +487,13 @@ elif st.session_state.current_app == "harvester":
         col_dl1, col_dl2 = st.columns(2)
         with col_dl1: st.download_button(label="💾 STÁHNOUT JSON DATA", data=json_data, file_name=file_name_data, mime="application/json", use_container_width=True)
         with col_dl2: st.download_button(label="🆔 STÁHNOUT SEZNAM ID", data=st.session_state.id_list_txt, file_name=file_name_ids, use_container_width=True)
+
+        # Tlačítko Reset přesunuto dolů pod download
+        st.write("")
+        if st.button("🔄 Začít znovu / Nová analýza", type="primary", use_container_width=True):
+            st.session_state.results_ready = False
+            st.session_state.search_performed = False
+            st.rerun()
 
         st.markdown("**Náhled dat (první ticket):**")
         preview = json.dumps(st.session_state.export_data[0] if st.session_state.export_data else {}, ensure_ascii=False, indent=2)
