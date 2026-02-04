@@ -150,6 +150,67 @@ if 'categories' not in st.session_state:
         st.error("Nepodařilo se načíst číselníky. Zkontrolujte připojení nebo TOKEN.")
         st.stop()
 
+# --- CALLBACK FUNKCE PRO DATUMY (Aby se projevily ihned) ---
+def set_date_range(d_from, d_to):
+    st.session_state.filter_date_from = d_from
+    st.session_state.filter_date_to = d_to
+
+def cb_this_year():
+    set_date_range(date(date.today().year, 1, 1), date.today())
+
+def cb_last_year():
+    today = date.today()
+    last_year = today.year - 1
+    set_date_range(date(last_year, 1, 1), date(last_year, 12, 31))
+
+def cb_last_half_year():
+    today = date.today()
+    first_of_this_month = today.replace(day=1)
+    last_of_prev_month = first_of_this_month - timedelta(days=1)
+    start_month = first_of_this_month.month - 6
+    start_year = first_of_this_month.year
+    if start_month <= 0:
+        start_month += 12
+        start_year -= 1
+    set_date_range(date(start_year, start_month, 1), last_of_prev_month)
+
+def cb_last_3_months():
+    today = date.today()
+    first_of_this_month = today.replace(day=1)
+    last_of_prev_month = first_of_this_month - timedelta(days=1)
+    start_month = first_of_this_month.month - 3
+    start_year = first_of_this_month.year
+    if start_month <= 0:
+        start_month += 12
+        start_year -= 1
+    set_date_range(date(start_year, start_month, 1), last_of_prev_month)
+
+def cb_last_month():
+    today = date.today()
+    first_of_this_month = today.replace(day=1)
+    last_of_prev_month = first_of_this_month - timedelta(days=1)
+    first_of_prev_month = last_of_prev_month.replace(day=1)
+    set_date_range(first_of_prev_month, last_of_prev_month)
+
+def cb_this_month():
+    set_date_range(date.today().replace(day=1), date.today())
+
+def cb_last_week():
+    today = date.today()
+    start_of_this_week = today - timedelta(days=today.weekday())
+    start_of_last_week = start_of_this_week - timedelta(weeks=1)
+    end_of_last_week = start_of_last_week + timedelta(days=6)
+    set_date_range(start_of_last_week, end_of_last_week)
+
+def cb_this_week():
+    today = date.today()
+    start_of_this_week = today - timedelta(days=today.weekday())
+    set_date_range(start_of_this_week, today)
+
+def cb_yesterday():
+    yesterday = date.today() - timedelta(days=1)
+    set_date_range(yesterday, yesterday)
+
 # --- STEP 1: FILTRY ---
 if not st.session_state.process_running and not st.session_state.results_ready:
     with st.container():
@@ -158,117 +219,48 @@ if not st.session_state.process_running and not st.session_state.results_ready:
         # A) DATUMY
         c_date1, c_date2 = st.columns(2)
         with c_date1:
-            d_from = st.date_input("Datum od", value=st.session_state.filter_date_from, format="DD.MM.YYYY", key="date_from_input")
+            # Widgety pro datum musí používat key, který je v session state, 
+            # ale callbacky buttonů tento klíč aktualizují.
+            d_from = st.date_input("Datum od", key="filter_date_from", format="DD.MM.YYYY")
         with c_date2:
-            d_to = st.date_input("Datum do", value=st.session_state.filter_date_to, format="DD.MM.YYYY", key="date_to_input")
+            d_to = st.date_input("Datum do", key="filter_date_to", format="DD.MM.YYYY")
         
-        # Okamžitá aktualizace state
-        st.session_state.filter_date_from = d_from
-        st.session_state.filter_date_to = d_to
-
-        # B) RYCHLÉ VOLBY
+        # B) RYCHLÉ VOLBY (Callbacky)
         st.caption("Rychlý výběr období:")
         b_r1 = st.columns(3)
-        if b_r1[0].button("Tento rok", use_container_width=True):
-            st.session_state.filter_date_from = date(date.today().year, 1, 1)
-            st.session_state.filter_date_to = date.today()
-            st.rerun()
-
-        if b_r1[1].button("Minulý rok", use_container_width=True):
-            today = date.today()
-            last_year = today.year - 1
-            st.session_state.filter_date_from = date(last_year, 1, 1)
-            st.session_state.filter_date_to = date(last_year, 12, 31)
-            st.rerun()
-
-        if b_r1[2].button("Poslední půl rok", use_container_width=True):
-            today = date.today()
-            first_of_this_month = today.replace(day=1)
-            last_of_prev_month = first_of_this_month - timedelta(days=1)
-            start_month = first_of_this_month.month - 6
-            start_year = first_of_this_month.year
-            if start_month <= 0:
-                start_month += 12
-                start_year -= 1
-            start_date = date(start_year, start_month, 1)
-            st.session_state.filter_date_from = start_date
-            st.session_state.filter_date_to = last_of_prev_month
-            st.rerun()
+        b_r1[0].button("Tento rok", use_container_width=True, on_click=cb_this_year)
+        b_r1[1].button("Minulý rok", use_container_width=True, on_click=cb_last_year)
+        b_r1[2].button("Poslední půl rok", use_container_width=True, on_click=cb_last_half_year)
 
         b_r2 = st.columns(3)
-        if b_r2[0].button("Poslední 3 měsíce", use_container_width=True):
-            today = date.today()
-            first_of_this_month = today.replace(day=1)
-            last_of_prev_month = first_of_this_month - timedelta(days=1)
-            start_month = first_of_this_month.month - 3
-            start_year = first_of_this_month.year
-            if start_month <= 0:
-                start_month += 12
-                start_year -= 1
-            start_date = date(start_year, start_month, 1)
-            st.session_state.filter_date_from = start_date
-            st.session_state.filter_date_to = last_of_prev_month
-            st.rerun()
-
-        if b_r2[1].button("Minulý měsíc", use_container_width=True):
-            today = date.today()
-            first_of_this_month = today.replace(day=1)
-            last_of_prev_month = first_of_this_month - timedelta(days=1)
-            first_of_prev_month = last_of_prev_month.replace(day=1)
-            st.session_state.filter_date_from = first_of_prev_month
-            st.session_state.filter_date_to = last_of_prev_month
-            st.rerun()
-
-        if b_r2[2].button("Tento měsíc", use_container_width=True):
-            st.session_state.filter_date_from = date.today().replace(day=1)
-            st.session_state.filter_date_to = date.today()
-            st.rerun()
+        b_r2[0].button("Poslední 3 měsíce", use_container_width=True, on_click=cb_last_3_months)
+        b_r2[1].button("Minulý měsíc", use_container_width=True, on_click=cb_last_month)
+        b_r2[2].button("Tento měsíc", use_container_width=True, on_click=cb_this_month)
 
         b_r3 = st.columns(3)
-        if b_r3[0].button("Minulý týden", use_container_width=True):
-            today = date.today()
-            start_of_this_week = today - timedelta(days=today.weekday())
-            start_of_last_week = start_of_this_week - timedelta(weeks=1)
-            end_of_last_week = start_of_last_week + timedelta(days=6)
-            st.session_state.filter_date_from = start_of_last_week
-            st.session_state.filter_date_to = end_of_last_week
-            st.rerun()
+        b_r3[0].button("Minulý týden", use_container_width=True, on_click=cb_last_week)
+        b_r3[1].button("Tento týden", use_container_width=True, on_click=cb_this_week)
+        b_r3[2].button("Včerejšek", use_container_width=True, on_click=cb_yesterday)
 
-        if b_r3[1].button("Tento týden", use_container_width=True):
-            today = date.today()
-            start_of_this_week = today - timedelta(days=today.weekday())
-            st.session_state.filter_date_from = start_of_this_week
-            st.session_state.filter_date_to = today
-            st.rerun()
-
-        if b_r3[2].button("Včerejšek", use_container_width=True):
-            yesterday = date.today() - timedelta(days=1)
-            st.session_state.filter_date_from = yesterday
-            st.session_state.filter_date_to = yesterday
-            st.rerun()
-
-        st.divider() # Oddělovač mezi datem a filtry
+        st.divider()
 
         # --- C) KATEGORIE A STATUS ---
         
-        # 1. Definice mapování možností (Název -> ID)
+        # Definice mapování a callbacků pro RESET (musí být zde)
         cat_options_map = {"VŠE (bez filtru)": "ALL"}
         cat_options_map.update({c['title']: c['name'] for c in st.session_state['categories']})
         
         stat_options_map = {"VŠE (bez filtru)": "ALL"}
         stat_options_map.update({s['title']: s['name'] for s in st.session_state['statuses']})
 
-        # 2. Definice Callback funkcí pro reset (musí být definovány před použitím)
-        # Tyto funkce se spustí okamžitě po kliknutí na button, ještě před překreslením stránky
         def reset_cat_callback():
-            st.session_state.sb_category = "VŠE (bez filtru)" # Nastaví vizuální hodnotu roletky
-            st.session_state.selected_cat_key = "ALL"         # Nastaví logickou hodnotu pro API
+            st.session_state.sb_category = "VŠE (bez filtru)"
+            st.session_state.selected_cat_key = "ALL"
 
         def reset_stat_callback():
             st.session_state.sb_status = "VŠE (bez filtru)"
             st.session_state.selected_stat_key = "ALL"
 
-        # 3. Pomocná funkce pro získání indexu (pro jistotu, kdyby selhal state)
         def get_index(options_dict, current_val_key):
             found_key = next((k for k, v in options_dict.items() if v == current_val_key), "VŠE (bez filtru)")
             try:
@@ -276,11 +268,9 @@ if not st.session_state.process_running and not st.session_state.results_ready:
             except ValueError:
                 return 0
 
-        # 4. Vykreslení sloupců
         c_filt1, c_filt2 = st.columns(2)
         
         with c_filt1:
-            # Vrátili jsme parametr 'key', aby callback mohl s widgetem manipulovat
             cat_idx = get_index(cat_options_map, st.session_state.selected_cat_key)
             sel_cat_label = st.selectbox(
                 "Kategorie", 
@@ -288,10 +278,7 @@ if not st.session_state.process_running and not st.session_state.results_ready:
                 index=cat_idx, 
                 key="sb_category"
             )
-            # Aktualizace logické proměnné podle toho, co uživatel vybral v roletce
             st.session_state.selected_cat_key = cat_options_map[sel_cat_label]
-            
-            # Button s parametrem on_click
             st.button("Vybrat vše (Kategorie)", use_container_width=True, on_click=reset_cat_callback)
         
         with c_filt2:
@@ -303,12 +290,9 @@ if not st.session_state.process_running and not st.session_state.results_ready:
                 key="sb_status"
             )
             st.session_state.selected_stat_key = stat_options_map[sel_stat_label]
-
-            # Button s parametrem on_click
             st.button("Vybrat vše (Status)", use_container_width=True, on_click=reset_stat_callback)
 
         st.write("")
-        
         # Tlačítko hledání - viditelné vždy
         if st.button("🔍 VYHLEDAT TICKETY", type="primary", use_container_width=True):
             st.session_state.search_performed = False
@@ -324,14 +308,12 @@ if not st.session_state.process_running and not st.session_state.results_ready:
             }
             
             filter_idx = 2
-            # Přidání filtru kategorie, pokud není ALL
             if st.session_state.selected_cat_key != "ALL":
                 params[f"filter[filters][{filter_idx}][field]"] = "category"
                 params[f"filter[filters][{filter_idx}][operator]"] = "eq"
                 params[f"filter[filters][{filter_idx}][value]"] = st.session_state.selected_cat_key
                 filter_idx += 1
             
-            # Přidání filtru statusu, pokud není ALL
             if st.session_state.selected_stat_key != "ALL":
                 params[f"filter[filters][{filter_idx}][field]"] = "statuses"
                 params[f"filter[filters][{filter_idx}][operator]"] = "eq"
@@ -365,7 +347,6 @@ if st.session_state.search_performed and not st.session_state.process_running an
         if count == 1000:
             st.info("ℹ️ API vrátilo maximální počet 1000 položek. Pokud potřebujete víc, zúžete období.")
 
-        # Tlačítko pro okamžité stažení seznamu ID
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         c_name = "VSE" if st.session_state.selected_cat_key == "ALL" else slugify(next((k for k,v in cat_options_map.items() if v == st.session_state.selected_cat_key), "cat"))
         s_name = "VSE" if st.session_state.selected_stat_key == "ALL" else slugify(next((k for k,v in stat_options_map.items() if v == st.session_state.selected_stat_key), "stat"))
@@ -539,8 +520,19 @@ if st.session_state.results_ready:
     
     # Generování názvů souborů
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    c_name = "VSE" if st.session_state.selected_cat_key == "ALL" else slugify(next((k for k,v in cat_options_map.items() if v == st.session_state.selected_cat_key), "cat"))
-    s_name = "VSE" if st.session_state.selected_stat_key == "ALL" else slugify(next((k for k,v in stat_options_map.items() if v == st.session_state.selected_stat_key), "stat"))
+    
+    # Pro jistotu znovu načteme/zajistíme mapování, i když by stačilo brát z proměnných,
+    # ale zde chceme mít jistotu kvůli 'next' funkci.
+    cat_opts = {"VŠE (bez filtru)": "ALL"}
+    if 'categories' in st.session_state:
+        cat_opts.update({c['title']: c['name'] for c in st.session_state['categories']})
+        
+    stat_opts = {"VŠE (bez filtru)": "ALL"}
+    if 'statuses' in st.session_state:
+        stat_opts.update({s['title']: s['name'] for s in st.session_state['statuses']})
+
+    c_name = "VSE" if st.session_state.selected_cat_key == "ALL" else slugify(next((k for k,v in cat_opts.items() if v == st.session_state.selected_cat_key), "cat"))
+    s_name = "VSE" if st.session_state.selected_stat_key == "ALL" else slugify(next((k for k,v in stat_opts.items() if v == st.session_state.selected_stat_key), "stat"))
     
     file_name_data = f"data_{c_name}_{s_name}_{ts}.json"
     file_name_ids = f"tickets_{c_name}_{s_name}_{ts}.txt"
@@ -562,4 +554,3 @@ if st.session_state.results_ready:
         st.session_state.results_ready = False
         st.session_state.search_performed = False
         st.rerun()
-
