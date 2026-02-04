@@ -5,7 +5,7 @@ import os
 import time
 import unicodedata
 import json
-from datetime import datetime
+from datetime import datetime, timedelta, date
 from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine
 
@@ -34,7 +34,7 @@ if not st.session_state.authenticated:
 INSTANCE_URL = st.secrets["DAKTELA_URL"]
 ACCESS_TOKEN = st.secrets["DAKTELA_TOKEN"]
 
-# --- SEZNAM DOPRAVCŮ PRO DETEKCI (NOVÉ Z PYTHON KÓDU) ---
+# --- SEZNAM DOPRAVCŮ PRO DETEKCI ---
 CARRIERS_DATA = {
     "cp": "Česká pošta", "ppl": "PPL", "dpd": "DPD", "geis": "Geis", "gls": "GLS",
     "zasilkovna": "Zásilkovna", "intime": "We Do", "toptrans": "Top Trans", "pbh": "Pošta Bez Hranic",
@@ -54,7 +54,7 @@ def load_anonymizer():
 
 analyzer, anonymizer = load_anonymizer()
 
-# --- 3. POMOCNÉ FUNKCE (AKTUALIZOVÁNO PODLE PYTHON KÓDU) ---
+# --- 3. POMOCNÉ FUNKCE ---
 
 def slugify(text):
     if not text: return "export"
@@ -104,10 +104,9 @@ def identify_side(title, email, is_user=False):
     return f"Klient ({title})" if title else "Klient"
 
 # --- 4. STREAMLIT UI ---
-# Nastavení schová levý panel (initial_sidebar_state="collapsed")
 st.set_page_config(page_title="Daktela Harvester", layout="centered", page_icon="🗃️", initial_sidebar_state="collapsed")
 
-# Skrytí sidebaru pomocí CSS (pro jistotu, aby tam nezůstala ani šipka)
+# Skrytí sidebaru
 st.markdown("""
     <style>
         [data-testid="stSidebar"] {display: none;}
@@ -117,229 +116,316 @@ st.markdown("""
 
 st.markdown("<h1 style='text-align: center;'>🗃️ Daktela Harvester</h1>", unsafe_allow_html=True)
 
-# Inicializace Session State
+# --- SESSION STATE INICIALIZACE ---
 if 'process_running' not in st.session_state: st.session_state.process_running = False
 if 'stop_requested' not in st.session_state: st.session_state.stop_requested = False
 if 'results_ready' not in st.session_state: st.session_state.results_ready = False
-if 'export_data' not in st.session_state: st.session_state.export_data = [] # ZMĚNA: Ukládáme data, ne text
+if 'export_data' not in st.session_state: st.session_state.export_data = []
 if 'id_list_txt' not in st.session_state: st.session_state.id_list_txt = ""
 if 'stats' not in st.session_state: st.session_state.stats = {}
+if 'found_tickets' not in st.session_state: st.session_state.found_tickets = [] # Seznam nalezených ticketů (fáze 1)
+if 'search_performed' not in st.session_state: st.session_state.search_performed = False
 
-st.write("Aplikace slouží pro vyexportování dat z Daktely do strukturovaného JSON formátu.")
-st.write("") 
-st.markdown("**Postupuj prosím podle kroků níže:**")
+# Výchozí datumy
+if 'filter_date_from' not in st.session_state: st.session_state.filter_date_from = date.today().replace(day=1)
+if 'filter_date_to' not in st.session_state: st.session_state.filter_date_to = date.today()
 
-# KROK 1
-with st.expander("📅 1. KROK: Nastavení časového období a limitů", expanded=not st.session_state.results_ready):
-    col1, col2 = st.columns(2)
-    with col1:
-        date_from = st.date_input("Datum od", datetime.now().replace(day=1), format="DD.MM.YYYY")
-    with col2:
-        date_to = st.date_input("Datum do", datetime.now(), format="DD.MM.YYYY")
-    
-    test_limit = st.number_input("Testovací limit (kolik ticketů max.? 0 = vše)", min_value=0, value=10)
-    
-    if st.button("Načíst číselníky z Daktely"):
-        with st.spinner("Načítám kategorie a statusy..."):
-            res_cat = requests.get(f"{INSTANCE_URL}/api/v6/ticketsCategories.json", headers={'x-auth-token': ACCESS_TOKEN})
-            st.session_state['categories'] = res_cat.json().get('result', {}).get('data', [])
-            res_stat = requests.get(f"{INSTANCE_URL}/api/v6/statuses.json", headers={'x-auth-token': ACCESS_TOKEN})
-            st.session_state['statuses'] = res_stat.json().get('result', {}).get('data', [])
-        st.success("Seznamy načteny.")
+# Načtení číselníků při startu, pokud nejsou
+if 'categories' not in st.session_state:
+    try:
+        res_cat = requests.get(f"{INSTANCE_URL}/api/v6/ticketsCategories.json", headers={'x-auth-token': ACCESS_TOKEN})
+        st.session_state['categories'] = res_cat.json().get('result', {}).get('data', [])
+        res_stat = requests.get(f"{INSTANCE_URL}/api/v6/statuses.json", headers={'x-auth-token': ACCESS_TOKEN})
+        st.session_state['statuses'] = res_stat.json().get('result', {}).get('data', [])
+    except:
+        st.error("Nepodařilo se načíst číselníky. Zkontrolujte připojení nebo TOKEN.")
+        st.stop()
 
-# KROK 2
-if 'categories' in st.session_state:
-    with st.expander("📁 2 KROK: výběr kategorie a statusu", expanded=not st.session_state.results_ready):
-        cat_options = {c['title']: c['name'] for c in st.session_state['categories']}
-        selected_cat = st.selectbox("Vyber kategorii", options=["-- Vyber kategorii --"] + list(cat_options.keys()))
+# --- STEP 1: FILTRY ---
+if not st.session_state.process_running and not st.session_state.results_ready:
+    with st.container():
+        st.subheader("1. Nastavení filtru")
         
-        stat_options = {s['title']: s['name'] for s in st.session_state['statuses']}
-        selected_stat = st.selectbox("Vyber status", options=["-- Vyber status --"] + list(stat_options.keys()))
+        # A) DATUMY
+        c_date1, c_date2 = st.columns(2)
+        with c_date1:
+            d_from = st.date_input("Datum od", value=st.session_state.filter_date_from, format="DD.MM.YYYY")
+        with c_date2:
+            d_to = st.date_input("Datum do", value=st.session_state.filter_date_to, format="DD.MM.YYYY")
+        
+        # Aktualizace state, pokud uživatel změnil input ručně
+        st.session_state.filter_date_from = d_from
+        st.session_state.filter_date_to = d_to
 
-    if selected_cat != "-- Vyber kategorii --" and selected_stat != "-- Vyber status --":
-        if not st.session_state.process_running and not st.session_state.results_ready:
-            if st.button("🚀 SPUSTIT SBĚR DAT", use_container_width=True):
-                st.session_state.process_running = True
-                st.session_state.stop_requested = False
-                st.rerun()
+        # B) RYCHLÉ VOLBY (Tlačítka pod datumem)
+        st.caption("Rychlý výběr období:")
+        b_cols = st.columns(6)
+        
+        if b_cols[0].button("Celý rok", use_container_width=True):
+            st.session_state.filter_date_from = date(date.today().year, 1, 1)
+            st.session_state.filter_date_to = date.today()
+            st.rerun()
+            
+        if b_cols[1].button("6 měsíců", use_container_width=True):
+            st.session_state.filter_date_from = date.today() - timedelta(days=180)
+            st.session_state.filter_date_to = date.today()
+            st.rerun()
+            
+        if b_cols[2].button("3 měsíce", use_container_width=True):
+            st.session_state.filter_date_from = date.today() - timedelta(days=90)
+            st.session_state.filter_date_to = date.today()
+            st.rerun()
 
-# PROCES SBĚRU
+        if b_cols[3].button("Měsíc", use_container_width=True):
+            st.session_state.filter_date_from = date.today() - timedelta(days=30)
+            st.session_state.filter_date_to = date.today()
+            st.rerun()
+
+        if b_cols[4].button("Týden", use_container_width=True):
+            st.session_state.filter_date_from = date.today() - timedelta(weeks=1)
+            st.session_state.filter_date_to = date.today()
+            st.rerun()
+            
+        if b_cols[5].button("Včera", use_container_width=True):
+            yesterday = date.today() - timedelta(days=1)
+            st.session_state.filter_date_from = yesterday
+            st.session_state.filter_date_to = yesterday
+            st.rerun()
+
+        st.write("") # Mezera
+
+        # C) KATEGORIE A STATUS (Vlevo / Vpravo)
+        c_filt1, c_filt2 = st.columns(2)
+        with c_filt1:
+            cat_options = {c['title']: c['name'] for c in st.session_state['categories']}
+            selected_cat = st.selectbox("Kategorie", options=["-- Vyber kategorii --"] + list(cat_options.keys()))
+        
+        with c_filt2:
+            stat_options = {s['title']: s['name'] for s in st.session_state['statuses']}
+            selected_stat = st.selectbox("Status", options=["-- Vyber status --"] + list(stat_options.keys()))
+
+        # Tlačítko pro FÁZI 1 (Hledání)
+        st.write("")
+        if selected_cat != "-- Vyber kategorii --" and selected_stat != "-- Vyber status --":
+            if st.button("🔍 VYHLEDAT TICKETY", type="primary", use_container_width=True):
+                st.session_state.search_performed = False # Reset
+                
+                # Sestavení filtrů
+                params = {
+                    "filter[logic]": "and",
+                    "filter[filters][0][field]": "created", "filter[filters][0][operator]": "gte", "filter[filters][0][value]": f"{st.session_state.filter_date_from} 00:00:00",
+                    "filter[filters][1][field]": "created", "filter[filters][1][operator]": "lte", "filter[filters][1][value]": f"{st.session_state.filter_date_to} 23:59:59",
+                    "filter[filters][2][field]": "category", "filter[filters][2][operator]": "eq", "filter[filters][2][value]": cat_options[selected_cat],
+                    "filter[filters][3][field]": "statuses", "filter[filters][3][operator]": "eq", "filter[filters][3][value]": stat_options[selected_stat],
+                    "take": 1000, # Pro hledání stačí list
+                    "fields[0]": "name", # Optimalizace: stahujeme jen jména/ID
+                    "fields[1]": "title",
+                    "fields[2]": "created",
+                    "fields[3]": "customFields", # Pro budoucí logiku
+                    "fields[4]": "category",
+                    "fields[5]": "statuses"
+                }
+                
+                with st.spinner("Prohledávám databázi..."):
+                    try:
+                        res = requests.get(f"{INSTANCE_URL}/api/v6/tickets.json", params=params, headers={'X-AUTH-TOKEN': ACCESS_TOKEN})
+                        data = res.json().get('result', {}).get('data', [])
+                        st.session_state.found_tickets = data
+                        st.session_state.search_performed = True
+                    except Exception as e:
+                        st.error(f"Chyba při komunikaci s API: {e}")
+
+# --- STEP 2: VÝSLEDEK HLEDÁNÍ & LIMIT ---
+if st.session_state.search_performed and not st.session_state.process_running and not st.session_state.results_ready:
+    st.divider()
+    st.subheader("2. Výsledek hledání & Limit")
+    
+    count = len(st.session_state.found_tickets)
+    if count == 0:
+        st.warning("⚠️ V zadaném období a nastavení nebyly nalezeny žádné tickety.")
+    else:
+        st.success(f"✅ Nalezeno **{count}** ticketů.")
+        if count == 1000:
+            st.info("ℹ️ API vrátilo maximální počet 1000 položek. Pokud potřebujete víc, zúžete období.")
+
+        st.write("Kolik ticketů chcete hloubkově zpracovat (stáhnout aktivity, e-maily)?")
+        limit_val = st.number_input("Limit (0 = zpracovat všechny nalezené)", min_value=0, max_value=count, value=min(count, 50))
+        
+        st.write("")
+        if st.button("⛏️ SPUSTIT HLOUBKOVOU TĚŽBU", type="primary", use_container_width=True):
+            st.session_state.final_limit = limit_val
+            st.session_state.process_running = True
+            st.session_state.stop_requested = False
+            st.rerun()
+
+# --- STEP 3: PROCES TĚŽBY (LOOP) ---
 if st.session_state.process_running:
     st.divider()
-    if st.button("🛑 ZASTAVIT SBĚR"):
+    st.subheader("3. Probíhá těžba dat...")
+    
+    if st.button("🛑 ZASTAVIT"):
         st.session_state.stop_requested = True
         st.session_state.process_running = False
         st.rerun()
 
-    # Příprava regexů pro čištění (Podle Python kódu)
+    # Příprava regexů
     noise_patterns = [r"Potvrzujeme, že Vaše zpráva byla úspěšně doručena", r"Jelikož Vám chceme poskytnout nejlepší servis", r"dnes ve dnech .* čerpám dovolenou"]
     cut_off_patterns = [r"S pozdravem", r"S pozdravom", r"Kind regards", r"Regards", r"S přáním pěkného dne", r"S přáním hezkého dne", r"Děkuji\n", r"Ďakujem\n", r"Díky\n", r"Tento e-mail nepředstavuje nabídku", r"Pro případ, že tato zpráva obsahuje návrh smlouvy", r"Disclaimer:", r"Confidentiality Notice:", r"Myslete na životní prostředí", r"Please think about the environment"]
     history_patterns = [r"-{5,}", r"_{5,}", r"---------- Odpovězená zpráva ----------", r"Dne .* odesílatel .* napsal\(a\):", r"Od: .* Posláno: .*", r"---------- Původní e-mail ----------"]
     combined_cut_regex = re.compile("|".join(cut_off_patterns + history_patterns), re.IGNORECASE | re.MULTILINE)
 
-    params = {
-        "filter[logic]": "and",
-        "filter[filters][0][field]": "created", "filter[filters][0][operator]": "gte", "filter[filters][0][value]": f"{date_from} 00:00:00",
-        "filter[filters][1][field]": "created", "filter[filters][1][operator]": "lte", "filter[filters][1][value]": f"{date_to} 23:59:59",
-        "filter[filters][2][field]": "category", "filter[filters][2][operator]": "eq", "filter[filters][2][value]": cat_options[selected_cat],
-        "filter[filters][3][field]": "statuses", "filter[filters][3][operator]": "eq", "filter[filters][3][value]": stat_options[selected_stat],
-        "take": 1000 # Bere plné objekty ticketů pro detekci VIP atd.
-    }
-    
-    with st.spinner("Získávám seznam ticketů..."):
-        res = requests.get(f"{INSTANCE_URL}/api/v6/tickets.json", params=params, headers={'X-AUTH-TOKEN': ACCESS_TOKEN})
-        tickets_raw = res.json().get('result', {}).get('data', [])
-    
-    if test_limit > 0: tickets_raw = tickets_raw[:test_limit]
+    # Aplikace limitu na seznam
+    tickets_to_process = st.session_state.found_tickets
+    if st.session_state.final_limit > 0:
+        tickets_to_process = tickets_to_process[:st.session_state.final_limit]
 
-    if not tickets_raw:
-        st.error("Žádné tickety nenalezeny.")
-        st.session_state.process_running = False
-    else:
-        pbar = st.progress(0)
-        eta_placeholder = st.empty()
-        status_placeholder = st.empty()
+    pbar = st.progress(0)
+    eta_placeholder = st.empty()
+    status_placeholder = st.empty()
+    
+    full_export_data = []
+    id_list_txt = f"SEZNAM ZPRACOVANÝCH ID\nDatum těžby: {datetime.now().strftime('%d.%m.%Y %H:%M')}\n" + "-"*30 + "\n"
+    
+    start_time = time.time()
+    total_count = len(tickets_to_process)
+
+    for idx, t_obj in enumerate(tickets_to_process):
+        if st.session_state.stop_requested: break
         
-        full_export_data = [] # List pro JSON
-        id_list_txt = f"SEZNAM ID TICKETŮ\nFiltr: {selected_cat} | {selected_stat}\nObdobí: {date_from.strftime('%d.%m.%Y')} - {date_to.strftime('%d.%m.%Y')}\n" + "-"*30 + "\n"
+        t_num = t_obj.get('name')
+        status_placeholder.markdown(f"📥 Zpracovávám ticket **{idx + 1}/{total_count}**: `{t_num}`")
+        id_list_txt += f"{t_num}\n"
         
-        start_time = time.time()
-        
-        for idx, t_obj in enumerate(tickets_raw):
-            if st.session_state.stop_requested: break
-            t_num = t_obj.get('name')
-            status_placeholder.markdown(f"📥 Právě zpracovávám ticket: **{t_num}**")
-            id_list_txt += f"{t_num}\n"
+        try:
+            # --- API VOLÁNÍ AKTIVIT ---
+            # Retry logika
+            acts = []
+            for attempt in range(3):
+                try:
+                    res_act = requests.get(f"{INSTANCE_URL}/api/v6/tickets/{t_num}/activities.json", headers={'X-AUTH-TOKEN': ACCESS_TOKEN}, timeout=30)
+                    res_act.raise_for_status()
+                    acts = res_act.json().get('result', {}).get('data', [])
+                    break
+                except:
+                    time.sleep(1)
             
-            # --- LOGIKA ZPRACOVÁNÍ JEDNOHO TICKETU (PŘEVZATO Z PYTHON KÓDU) ---
-            try:
-                # Retry mechanizmus (zjednodušený pro seq)
-                acts = []
-                for attempt in range(3):
-                    try:
-                        res_act = requests.get(f"{INSTANCE_URL}/api/v6/tickets/{t_num}/activities.json", headers={'X-AUTH-TOKEN': ACCESS_TOKEN}, timeout=30)
-                        res_act.raise_for_status()
-                        acts = res_act.json().get('result', {}).get('data', [])
-                        break
-                    except:
-                        time.sleep(1)
+            t_date, t_time = format_date_split(t_obj.get('created'))
+            t_status = t_obj.get('statuses', [{}])[0].get('title', 'N/A') if isinstance(t_obj.get('statuses'), list) and t_obj.get('statuses') else "N/A"
+            
+            # Detekce VIP
+            custom_fields = t_obj.get('customFields', {})
+            vip_list = custom_fields.get('vip', [])
+            ticket_clientType = "VIP" if "→ VIP KLIENT ←" in vip_list else "Standard"
+            
+            ticket_entry = {
+                "ticket_number": t_num, 
+                "ticket_name": t_obj.get('title', 'Bez předmětu'),
+                "ticket_clientType": ticket_clientType,
+                "ticket_category": t_obj.get('category', {}).get('title', 'N/A') if t_obj.get('category') else "N/A",
+                "ticket_status": t_status, 
+                "ticket_creationDate": t_date, 
+                "ticket_creationTime": t_time,
+                "activities": []
+            }
+
+            for a_idx, act in enumerate(sorted(acts, key=lambda x: x.get('time', '')), 1):
+                item = act.get('item') or {}
+                address = item.get('address', '')
+                cleaned = clean_html(item.get('text') or act.get('description'))
+                if not cleaned: continue
                 
-                t_date, t_time = format_date_split(t_obj.get('created'))
-                t_status = t_obj.get('statuses', [{}])[0].get('title', 'N/A') if isinstance(t_obj.get('statuses'), list) and t_obj.get('statuses') else "N/A"
+                # Čištění šumu
+                if any(re.search(p, cleaned, re.IGNORECASE) for p in noise_patterns):
+                    cleaned = "[AUTOMATICKÝ EMAIL BALÍKOBOTU]"
+                else:
+                    match = combined_cut_regex.search(cleaned)
+                    if match: cleaned = cleaned[:match.start()].strip() + "\n\n[PODPIS]"
+
+                u_title = (act.get('user') or {}).get('title')
+                c_title = (act.get('contact') or {}).get('title')
+                direction = item.get('direction', 'out')
+
+                if direction == "in":
+                    sender = identify_side(c_title, address, is_user=False)
+                    recipient = "Balíkobot"
+                else:
+                    sender = identify_side(u_title, "", is_user=True)
+                    recipient = identify_side(c_title, address, is_user=False)
+
+                a_date, a_time = format_date_split(act.get('time'))
+                act_type = act.get('type') or "COMMENT"
                 
-                # Detekce VIP klienta
-                custom_fields = t_obj.get('customFields', {})
-                vip_list = custom_fields.get('vip', [])
-                ticket_clientType = "VIP" if "→ VIP KLIENT ←" in vip_list else "Standard"
-                
-                ticket_entry = {
-                    "ticket_number": t_num, 
-                    "ticket_name": t_obj.get('title', 'Bez předmětu'),
-                    "ticket_clientType": ticket_clientType,
-                    "ticket_category": t_obj.get('category', {}).get('title', 'N/A') if t_obj.get('category') else "N/A",
-                    "ticket_status": t_status, 
-                    "ticket_creationDate": t_date, 
-                    "ticket_creationTime": t_time,
-                    "activities": []
+                act_data = {
+                    "activity_number": a_idx, 
+                    "activity_type": act_type,
+                    "activity_sender": sender
                 }
-
-                for a_idx, act in enumerate(sorted(acts, key=lambda x: x.get('time', '')), 1):
-                    item = act.get('item') or {}
-                    address = item.get('address', '')
-                    cleaned = clean_html(item.get('text') or act.get('description'))
-                    if not cleaned: continue
-                    
-                    if any(re.search(p, cleaned, re.IGNORECASE) for p in noise_patterns):
-                        cleaned = "[AUTOMATICKÝ EMAIL BALÍKOBOTU]"
-                    else:
-                        match = combined_cut_regex.search(cleaned)
-                        if match: cleaned = cleaned[:match.start()].strip() + "\n\n[PODPIS]"
-
-                    u_title = (act.get('user') or {}).get('title')
-                    c_title = (act.get('contact') or {}).get('title')
-                    direction = item.get('direction', 'out')
-
-                    if direction == "in":
-                        sender = identify_side(c_title, address, is_user=False)
-                        recipient = "Balíkobot"
-                    else:
-                        sender = identify_side(u_title, "", is_user=True)
-                        recipient = identify_side(c_title, address, is_user=False)
-
-                    a_date, a_time = format_date_split(act.get('time'))
-                    act_type = act.get('type') or "COMMENT"
-                    
-                    act_data = {
-                        "activity_number": a_idx, 
-                        "activity_type": act_type,
-                        "activity_sender": sender
-                    }
-                    if act_type != "COMMENT":
-                        act_data["activity_recipient"] = recipient
-                    
-                    act_data.update({
-                        "activity_creationDate": a_date, 
-                        "activity_creationTime": a_time,
-                        "activity_text": cleaned
-                    })
-                    ticket_entry["activities"].append(act_data)
+                if act_type != "COMMENT":
+                    act_data["activity_recipient"] = recipient
                 
-                full_export_data.append(ticket_entry)
+                act_data.update({
+                    "activity_creationDate": a_date, 
+                    "activity_creationTime": a_time,
+                    "activity_text": cleaned
+                })
+                ticket_entry["activities"].append(act_data)
+            
+            full_export_data.append(ticket_entry)
 
-            except Exception as e:
-                pass # Error handling mlčí, jako v původním UI
+        except Exception as e:
+            pass 
 
-            pbar.progress((idx + 1) / len(tickets_raw))
-            avg_time = (time.time() - start_time) / (idx + 1)
-            remaining = (len(tickets_raw) - (idx + 1)) * avg_time
-            eta_placeholder.markdown(f"⏱️ **ETA:** cca {int(remaining)}s | **Hotovo:** {idx+1}/{len(tickets_raw)}")
+        # Update Progress
+        progress = (idx + 1) / total_count
+        pbar.progress(progress)
+        
+        elapsed = time.time() - start_time
+        if idx > 0:
+            avg_per_item = elapsed / (idx + 1)
+            remaining_sec = (total_count - (idx + 1)) * avg_per_item
+            eta_placeholder.caption(f"⏱️ Zbývá cca: {int(remaining_sec)} sekund")
 
-        st.session_state.stats = {
-            "tickets": len(tickets_raw),
-            "activities": sum(len(t['activities']) for t in full_export_data),
-            "lines": "N/A (JSON)",
-            "size": f"{len(json.dumps(full_export_data).encode('utf-8')) / 1024:.1f} KB"
-        }
-        st.session_state.export_data = full_export_data
-        st.session_state.id_list_txt = id_list_txt
-        st.session_state.results_ready = True
-        st.session_state.process_running = False
-        st.rerun()
+    # Konec procesu
+    st.session_state.stats = {
+        "tickets": len(full_export_data),
+        "activities": sum(len(t['activities']) for t in full_export_data),
+        "size": f"{len(json.dumps(full_export_data).encode('utf-8')) / 1024:.1f} KB"
+    }
+    st.session_state.export_data = full_export_data
+    st.session_state.id_list_txt = id_list_txt
+    st.session_state.results_ready = True
+    st.session_state.process_running = False
+    st.rerun()
 
-# VÝSLEDKY
+# --- STEP 4: VÝSLEDKY ---
 if st.session_state.results_ready:
     st.divider()
-    st.success("🎉 Export dokončen!")
+    st.success("🎉 Těžba dokončena!")
+    
     s = st.session_state.stats
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Ticketů", s["tickets"])
-    c2.metric("Aktivit", s["activities"])
-    c3.metric("Formát", "JSON")
-    c4.metric("Velikost", s["size"])
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Zpracováno ticketů", s["tickets"])
+    c2.metric("Nalezeno aktivit", s["activities"])
+    c3.metric("Velikost dat", s["size"])
 
     st.write("")
     
-    # Serializace JSON pro stažení
+    # Serializace
     json_data = json.dumps(st.session_state.export_data, ensure_ascii=False, indent=2)
+    cat_slug = slugify(st.session_state.get('categories', [{'name': 'all'}])[0]['name']) # fallback pro jméno
     
     col_dl1, col_dl2 = st.columns(2)
     with col_dl1:
-        st.download_button(label="💾 STÁHNOUT JSON DATA", data=json_data, file_name=f"export_{slugify(selected_cat)}.json", mime="application/json", use_container_width=True)
+        st.download_button(label="💾 STÁHNOUT JSON DATA", data=json_data, file_name=f"export_harvest.json", mime="application/json", use_container_width=True)
     with col_dl2:
-        st.download_button(label="🆔 STÁHNOUT SEZNAM ID", data=st.session_state.id_list_txt, file_name=f"seznam_id_{slugify(selected_cat)}.txt", use_container_width=True)
+        st.download_button(label="🆔 STÁHNOUT SEZNAM ID", data=st.session_state.id_list_txt, file_name=f"seznam_id_harvest.txt", use_container_width=True)
 
-    st.markdown("**Náhled dat (JSON - první ticket):**")
-    
-    # Náhled prvního záznamu (pokud existuje)
-    if st.session_state.export_data:
-        preview = json.dumps(st.session_state.export_data[0], ensure_ascii=False, indent=2)
-    else:
-        preview = "{}"
-    
-    # Scrollovací okno s fixní výškou 400px
+    st.markdown("**Náhled dat (první ticket):**")
+    preview = json.dumps(st.session_state.export_data[0] if st.session_state.export_data else {}, ensure_ascii=False, indent=2)
     st.code(preview, language="json")
-    st.markdown("""<style> div[data-testid="stCodeBlock"] > div { overflow-y: auto; height: 400px; } </style>""", unsafe_allow_html=True)
+    st.markdown("""<style> div[data-testid="stCodeBlock"] > div { overflow-y: auto; height: 300px; } </style>""", unsafe_allow_html=True)
     
-    if st.button("🔄 Nový export", use_container_width=True):
+    if st.button("🔄 Začít znovu (Reset)", use_container_width=True):
         st.session_state.results_ready = False
+        st.session_state.search_performed = False
         st.rerun()
