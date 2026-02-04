@@ -20,7 +20,6 @@ if not st.session_state.authenticated:
     
     with st.form("login_form"):
         password_input = st.text_input("Heslo", type="password")
-        # Prázdné sloupce pro zarovnání tlačítka na střed/vpravo, pokud chceš
         col_auth_1, col_auth_2, col_auth_3 = st.columns([1,2,1])
         with col_auth_2:
             submitted = st.form_submit_button("Přihlásit se", use_container_width=True)
@@ -276,7 +275,8 @@ if not st.session_state.process_running and not st.session_state.results_ready:
             
             # Button "Vybrat vše" pro kategorii
             if st.button("Vybrat vše (Kategorie)", use_container_width=True):
-                st.session_state.selected_cat_key = "ALL"
+                st.session_state.sb_category = "VŠE (bez filtru)" # Reset widgetu
+                st.session_state.selected_cat_key = "ALL"         # Reset logiky
                 st.rerun()
         
         with c_filt2:
@@ -286,11 +286,12 @@ if not st.session_state.process_running and not st.session_state.results_ready:
 
             # Button "Vybrat vše" pro status
             if st.button("Vybrat vše (Status)", use_container_width=True):
-                st.session_state.selected_stat_key = "ALL"
+                st.session_state.sb_status = "VŠE (bez filtru)"   # Reset widgetu
+                st.session_state.selected_stat_key = "ALL"        # Reset logiky
                 st.rerun()
 
         st.write("")
-        # Tlačítko hledání je viditelné vždy, protože "VŠE" je validní volba
+        # Tlačítko hledání je viditelné vždy
         if st.button("🔍 VYHLEDAT TICKETY", type="primary", use_container_width=True):
             st.session_state.search_performed = False
             
@@ -332,9 +333,6 @@ if not st.session_state.process_running and not st.session_state.results_ready:
 if st.session_state.search_performed and not st.session_state.process_running and not st.session_state.results_ready:
     st.divider()
     
-    # Zde už není potřeba tlačítko "Zpět", protože filtry nahoře zůstávají aktivní a editovatelné!
-    # Uživatel může změnit datum a znovu kliknout na "VYHLEDAT TICKETY".
-    # Ale pro čistotu UI můžeme nechat možnost zavřít výsledky.
     if st.button("❌ Zavřít výsledky a upravit zadání"):
         st.session_state.search_performed = False
         st.rerun()
@@ -351,7 +349,6 @@ if st.session_state.search_performed and not st.session_state.process_running an
 
         # Tlačítko pro okamžité stažení seznamu ID
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        # Získání názvů pro soubor (ošetření ALL)
         c_name = "VSE" if st.session_state.selected_cat_key == "ALL" else slugify(next((k for k,v in cat_options_map.items() if v == st.session_state.selected_cat_key), "cat"))
         s_name = "VSE" if st.session_state.selected_stat_key == "ALL" else slugify(next((k for k,v in stat_options_map.items() if v == st.session_state.selected_stat_key), "stat"))
         
