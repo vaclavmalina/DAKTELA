@@ -260,34 +260,34 @@ if not st.session_state.process_running and not st.session_state.results_ready:
         # Zjištění indexu pro selectbox podle session_state
         # Pokud je v session "ALL", index je 0. Jinak najdeme index názvu.
         def get_index(options_dict, current_val_key):
-            # options_dict: {"Název": "ID", ...}
-            # current_val_key: "ID" (nebo "ALL")
-            # Potřebujeme najít klíč (Název), který odpovídá current_val_key
             found_key = next((k for k, v in options_dict.items() if v == current_val_key), "VŠE (bez filtru)")
-            return list(options_dict.keys()).index(found_key)
+            try:
+                return list(options_dict.keys()).index(found_key)
+            except ValueError:
+                return 0
 
         c_filt1, c_filt2 = st.columns(2)
         
         with c_filt1:
             cat_idx = get_index(cat_options_map, st.session_state.selected_cat_key)
-            sel_cat_label = st.selectbox("Kategorie", options=list(cat_options_map.keys()), index=cat_idx, key="sb_category")
+            # ZMĚNA: Odstraněn parametr 'key', aby se widget řídil čistě indexem
+            sel_cat_label = st.selectbox("Kategorie", options=list(cat_options_map.keys()), index=cat_idx)
             st.session_state.selected_cat_key = cat_options_map[sel_cat_label]
             
             # Button "Vybrat vše" pro kategorii
             if st.button("Vybrat vše (Kategorie)", use_container_width=True):
-                st.session_state.sb_category = "VŠE (bez filtru)" # Reset widgetu
-                st.session_state.selected_cat_key = "ALL"         # Reset logiky
+                st.session_state.selected_cat_key = "ALL"
                 st.rerun()
         
         with c_filt2:
             stat_idx = get_index(stat_options_map, st.session_state.selected_stat_key)
-            sel_stat_label = st.selectbox("Status", options=list(stat_options_map.keys()), index=stat_idx, key="sb_status")
+            # ZMĚNA: Odstraněn parametr 'key'
+            sel_stat_label = st.selectbox("Status", options=list(stat_options_map.keys()), index=stat_idx)
             st.session_state.selected_stat_key = stat_options_map[sel_stat_label]
 
             # Button "Vybrat vše" pro status
             if st.button("Vybrat vše (Status)", use_container_width=True):
-                st.session_state.sb_status = "VŠE (bez filtru)"   # Reset widgetu
-                st.session_state.selected_stat_key = "ALL"        # Reset logiky
+                st.session_state.selected_stat_key = "ALL"
                 st.rerun()
 
         st.write("")
@@ -521,8 +521,6 @@ if st.session_state.results_ready:
     
     # Generování názvů souborů
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    # Získání názvů pro soubor (opět ošetření ALL pro Step 4)
-    # Musíme znovu načíst mapu, nebo si uložit slugy do session. Pro jednoduchost znovu mapujeme:
     c_name = "VSE" if st.session_state.selected_cat_key == "ALL" else slugify(next((k for k,v in cat_options_map.items() if v == st.session_state.selected_cat_key), "cat"))
     s_name = "VSE" if st.session_state.selected_stat_key == "ALL" else slugify(next((k for k,v in stat_options_map.items() if v == st.session_state.selected_stat_key), "stat"))
     
