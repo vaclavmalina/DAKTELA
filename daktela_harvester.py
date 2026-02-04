@@ -103,81 +103,39 @@ def identify_side(title, email, is_user=False):
             return f"Dopravce ({name})"
     return f"Klient ({title})" if title else "Klient"
 
-# --- GLOBÁLNÍ CALLBACK FUNKCE (Musí být zde, aby byly viditelné) ---
+# --- GLOBÁLNÍ CALLBACK FUNKCE (Musí být zde) ---
 def set_date_range(d_from, d_to):
     st.session_state.filter_date_from = d_from
     st.session_state.filter_date_to = d_to
 
-def cb_this_year():
-    set_date_range(date(date.today().year, 1, 1), date.today())
-
-def cb_last_year():
-    today = date.today()
-    last_year = today.year - 1
-    set_date_range(date(last_year, 1, 1), date(last_year, 12, 31))
-
+def cb_this_year(): set_date_range(date(date.today().year, 1, 1), date.today())
+def cb_last_year(): today = date.today(); last_year = today.year - 1; set_date_range(date(last_year, 1, 1), date(last_year, 12, 31))
 def cb_last_half_year():
-    today = date.today()
-    first_of_this_month = today.replace(day=1)
-    last_of_prev_month = first_of_this_month - timedelta(days=1)
-    start_month = first_of_this_month.month - 6
-    start_year = first_of_this_month.year
-    if start_month <= 0:
-        start_month += 12
-        start_year -= 1
+    today = date.today(); first_of_this_month = today.replace(day=1); last_of_prev_month = first_of_this_month - timedelta(days=1)
+    start_month = first_of_this_month.month - 6; start_year = first_of_this_month.year
+    if start_month <= 0: start_month += 12; start_year -= 1
     set_date_range(date(start_year, start_month, 1), last_of_prev_month)
-
 def cb_last_3_months():
-    today = date.today()
-    first_of_this_month = today.replace(day=1)
-    last_of_prev_month = first_of_this_month - timedelta(days=1)
-    start_month = first_of_this_month.month - 3
-    start_year = first_of_this_month.year
-    if start_month <= 0:
-        start_month += 12
-        start_year -= 1
+    today = date.today(); first_of_this_month = today.replace(day=1); last_of_prev_month = first_of_this_month - timedelta(days=1)
+    start_month = first_of_this_month.month - 3; start_year = first_of_this_month.year
+    if start_month <= 0: start_month += 12; start_year -= 1
     set_date_range(date(start_year, start_month, 1), last_of_prev_month)
-
 def cb_last_month():
-    today = date.today()
-    first_of_this_month = today.replace(day=1)
-    last_of_prev_month = first_of_this_month - timedelta(days=1)
-    first_of_prev_month = last_of_prev_month.replace(day=1)
+    today = date.today(); first_of_this_month = today.replace(day=1); last_of_prev_month = first_of_this_month - timedelta(days=1); first_of_prev_month = last_of_prev_month.replace(day=1)
     set_date_range(first_of_prev_month, last_of_prev_month)
-
-def cb_this_month():
-    set_date_range(date.today().replace(day=1), date.today())
-
+def cb_this_month(): set_date_range(date.today().replace(day=1), date.today())
 def cb_last_week():
-    today = date.today()
-    start_of_this_week = today - timedelta(days=today.weekday())
-    start_of_last_week = start_of_this_week - timedelta(weeks=1)
-    end_of_last_week = start_of_last_week + timedelta(days=6)
+    today = date.today(); start_of_this_week = today - timedelta(days=today.weekday()); start_of_last_week = start_of_this_week - timedelta(weeks=1); end_of_last_week = start_of_last_week + timedelta(days=6)
     set_date_range(start_of_last_week, end_of_last_week)
+def cb_this_week(): today = date.today(); start_of_this_week = today - timedelta(days=today.weekday()); set_date_range(start_of_this_week, today)
+def cb_yesterday(): yesterday = date.today() - timedelta(days=1); set_date_range(yesterday, yesterday)
 
-def cb_this_week():
-    today = date.today()
-    start_of_this_week = today - timedelta(days=today.weekday())
-    set_date_range(start_of_this_week, today)
-
-def cb_yesterday():
-    yesterday = date.today() - timedelta(days=1)
-    set_date_range(yesterday, yesterday)
-
-def reset_cat_callback():
-    st.session_state.sb_category = "VŠE (bez filtru)"
-    st.session_state.selected_cat_key = "ALL"
-
-def reset_stat_callback():
-    st.session_state.sb_status = "VŠE (bez filtru)"
-    st.session_state.selected_stat_key = "ALL"
-
+def reset_cat_callback(): st.session_state.sb_category = "VŠE (bez filtru)"; st.session_state.selected_cat_key = "ALL"
+def reset_stat_callback(): st.session_state.sb_status = "VŠE (bez filtru)"; st.session_state.selected_stat_key = "ALL"
 def get_index(options_dict, current_val_key):
     found_key = next((k for k, v in options_dict.items() if v == current_val_key), "VŠE (bez filtru)")
-    try:
-        return list(options_dict.keys()).index(found_key)
-    except ValueError:
-        return 0
+    try: return list(options_dict.keys()).index(found_key)
+    except ValueError: return 0
 
 # --- HLAVNÍ UI ---
 st.set_page_config(page_title="Balíkobot Data Centrum", layout="centered", initial_sidebar_state="collapsed")
@@ -299,6 +257,7 @@ elif st.session_state.current_app == "harvester":
 
     # -------------------------------------------------------------------------
     # STRIKTNÍ LOGIKA ŘÍZENÍ UI (STATE MACHINE)
+    # Zobrazí se vždy POUZE JEDEN blok.
     # -------------------------------------------------------------------------
 
     # >>> BLOK A: BĚŽÍ PROCES (STEP 3) <<<
@@ -485,7 +444,8 @@ elif st.session_state.current_app == "harvester":
                         st.session_state.search_performed = True
                     except Exception as e: st.error(f"Chyba při komunikaci s API: {e}")
 
-        # STEP 2: VÝSLEDEK HLEDÁNÍ (vnořeno v else bloku)
+        # STEP 2: VÝSLEDEK HLEDÁNÍ
+        # Toto se zobrazí jen když je search_performed=True A zárověn process_running=False (díky struktuře if/elif/else nahoře)
         if st.session_state.search_performed:
             st.divider()
             
