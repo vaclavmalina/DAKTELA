@@ -249,16 +249,26 @@ if not st.session_state.process_running and not st.session_state.results_ready:
 
         st.divider() # Oddělovač mezi datem a filtry
 
-        # C) KATEGORIE A STATUS - Zobrazí se vždy (uživatel už datum vidí)
-        # Příprava možností s "VŠE" na začátku
+        # --- C) KATEGORIE A STATUS ---
+        
+        # 1. Definice mapování možností (Název -> ID)
         cat_options_map = {"VŠE (bez filtru)": "ALL"}
         cat_options_map.update({c['title']: c['name'] for c in st.session_state['categories']})
         
         stat_options_map = {"VŠE (bez filtru)": "ALL"}
         stat_options_map.update({s['title']: s['name'] for s in st.session_state['statuses']})
 
-        # Zjištění indexu pro selectbox podle session_state
-        # Pokud je v session "ALL", index je 0. Jinak najdeme index názvu.
+        # 2. Definice Callback funkcí pro reset (musí být definovány před použitím)
+        # Tyto funkce se spustí okamžitě po kliknutí na button, ještě před překreslením stránky
+        def reset_cat_callback():
+            st.session_state.sb_category = "VŠE (bez filtru)" # Nastaví vizuální hodnotu roletky
+            st.session_state.selected_cat_key = "ALL"         # Nastaví logickou hodnotu pro API
+
+        def reset_stat_callback():
+            st.session_state.sb_status = "VŠE (bez filtru)"
+            st.session_state.selected_stat_key = "ALL"
+
+        # 3. Pomocná funkce pro získání indexu (pro jistotu, kdyby selhal state)
         def get_index(options_dict, current_val_key):
             found_key = next((k for k, v in options_dict.items() if v == current_val_key), "VŠE (bez filtru)")
             try:
@@ -266,32 +276,40 @@ if not st.session_state.process_running and not st.session_state.results_ready:
             except ValueError:
                 return 0
 
+        # 4. Vykreslení sloupců
         c_filt1, c_filt2 = st.columns(2)
         
         with c_filt1:
+            # Vrátili jsme parametr 'key', aby callback mohl s widgetem manipulovat
             cat_idx = get_index(cat_options_map, st.session_state.selected_cat_key)
-            # ZMĚNA: Odstraněn parametr 'key', aby se widget řídil čistě indexem
-            sel_cat_label = st.selectbox("Kategorie", options=list(cat_options_map.keys()), index=cat_idx)
+            sel_cat_label = st.selectbox(
+                "Kategorie", 
+                options=list(cat_options_map.keys()), 
+                index=cat_idx, 
+                key="sb_category"
+            )
+            # Aktualizace logické proměnné podle toho, co uživatel vybral v roletce
             st.session_state.selected_cat_key = cat_options_map[sel_cat_label]
             
-            # Button "Vybrat vše" pro kategorii
-            if st.button("Vybrat vše (Kategorie)", use_container_width=True):
-                st.session_state.selected_cat_key = "ALL"
-                st.rerun()
+            # Button s parametrem on_click
+            st.button("Vybrat vše (Kategorie)", use_container_width=True, on_click=reset_cat_callback)
         
         with c_filt2:
             stat_idx = get_index(stat_options_map, st.session_state.selected_stat_key)
-            # ZMĚNA: Odstraněn parametr 'key'
-            sel_stat_label = st.selectbox("Status", options=list(stat_options_map.keys()), index=stat_idx)
+            sel_stat_label = st.selectbox(
+                "Status", 
+                options=list(stat_options_map.keys()), 
+                index=stat_idx, 
+                key="sb_status"
+            )
             st.session_state.selected_stat_key = stat_options_map[sel_stat_label]
 
-            # Button "Vybrat vše" pro status
-            if st.button("Vybrat vše (Status)", use_container_width=True):
-                st.session_state.selected_stat_key = "ALL"
-                st.rerun()
+            # Button s parametrem on_click
+            st.button("Vybrat vše (Status)", use_container_width=True, on_click=reset_stat_callback)
 
         st.write("")
-        # Tlačítko hledání je viditelné vždy
+        
+        # Tlačítko hledání - viditelné vždy
         if st.button("🔍 VYHLEDAT TICKETY", type="primary", use_container_width=True):
             st.session_state.search_performed = False
             
@@ -544,3 +562,4 @@ if st.session_state.results_ready:
         st.session_state.results_ready = False
         st.session_state.search_performed = False
         st.rerun()
+
